@@ -6,31 +6,50 @@
   <title>GridWise LLM — Smart Campus Energy Optimization</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <style>
     :root {
+      --bg-deep: #04060f;
       --bg-base: #070b14;
-      --bg-surface: rgba(15, 23, 42, 0.72);
-      --bg-surface-elevated: rgba(30, 41, 59, 0.6);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --border-focus: rgba(34, 211, 238, 0.4);
+      --bg-surface: rgba(13, 19, 33, 0.72);
+      --bg-surface-elevated: rgba(20, 28, 46, 0.78);
+      --bg-card: rgba(15, 22, 38, 0.65);
+      --bg-inset: rgba(6, 11, 22, 0.55);
+      --border-soft: rgba(255, 255, 255, 0.06);
+      --border-mid: rgba(255, 255, 255, 0.1);
+      --border-strong: rgba(255, 255, 255, 0.18);
+      --border-accent: rgba(34, 211, 238, 0.35);
       --primary: #10b981;
-      --primary-glow: rgba(16, 185, 129, 0.25);
+      --primary-bright: #34d399;
+      --primary-glow: rgba(16, 185, 129, 0.35);
       --secondary: #06b6d4;
+      --secondary-bright: #22d3ee;
+      --accent-gold: #f5d485;
+      --accent-gold-bright: #fbbf24;
       --accent-solar: #fbbf24;
       --accent-grid: #38bdf8;
       --accent-batt: #34d399;
-      --accent-cost: #a78bfa;
+      --accent-cost: #c4b5fd;
+      --accent-rose: #fda4af;
       --accent-danger: #f87171;
+      --text-bright: #ffffff;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --text-dim: #64748b;
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 18px;
+      --text-faint: #475569;
+      --radius-xs: 6px;
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 22px;
+      --radius-xl: 28px;
+      --shadow-soft: 0 4px 24px -6px rgba(0, 0, 0, 0.35);
+      --shadow-mid: 0 12px 36px -10px rgba(0, 0, 0, 0.5);
+      --shadow-strong: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
+      --shadow-glow: 0 0 40px rgba(16, 185, 129, 0.25);
       --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
+      --font-display: 'Fraunces', 'Plus Jakarta Sans', serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
     }
 
     * {
@@ -39,258 +58,456 @@
       padding: 0;
     }
 
-    body {
-      background-color: var(--bg-base);
+    html, body {
+      background-color: var(--bg-deep);
       color: var(--text-main);
       font-family: var(--font-main);
       min-height: 100vh;
       overflow-x: hidden;
-      line-height: 1.5;
-      background-image: 
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(6, 182, 212, 0.15), transparent 70%),
-        radial-gradient(ellipse 60% 40% at 85% 10%, rgba(16, 185, 129, 0.1), transparent 60%),
-        radial-gradient(circle 800px at 0% 100%, rgba(167, 139, 250, 0.08), transparent 70%);
-      background-attachment: fixed;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: 'cv11', 'ss01', 'ss03';
     }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+    body {
+      background-image:
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(6, 182, 212, 0.18), transparent 65%),
+        radial-gradient(ellipse 50% 40% at 90% 10%, rgba(16, 185, 129, 0.12), transparent 60%),
+        radial-gradient(circle 900px at 5% 100%, rgba(196, 181, 253, 0.08), transparent 65%),
+        radial-gradient(circle 600px at 100% 60%, rgba(245, 212, 133, 0.04), transparent 60%);
+      background-attachment: fixed;
+      position: relative;
+    }
 
-    /* Top Navigation Header */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+      z-index: 0;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(52, 211, 153, 0.25), rgba(34, 211, 238, 0.25));
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(52, 211, 153, 0.4), rgba(34, 211, 238, 0.4));
+    }
+
+    ::selection {
+      background: rgba(34, 211, 238, 0.3);
+      color: #fff;
+    }
+
+    .app-shell {
+      position: relative;
+      z-index: 1;
+    }
+
     header.header {
       position: sticky;
       top: 0;
       z-index: 50;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      background: rgba(7, 11, 20, 0.75);
-      border-bottom: 1px solid var(--border-subtle);
-      padding: 0.85rem 1.75rem;
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      background: rgba(4, 8, 18, 0.65);
+      border-bottom: 1px solid var(--border-soft);
+      padding: 1rem 2rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      transition: all 0.3s ease;
+    }
+
+    header.header::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.4), rgba(34, 211, 238, 0.4), transparent);
+      opacity: 0.6;
     }
 
     .brand-wrap {
       display: flex;
       align-items: center;
-      gap: 0.85rem;
+      gap: 1rem;
     }
 
     .brand-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-md);
-      background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+      width: 46px;
+      height: 46px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #0ea5e9 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+      box-shadow:
+        0 0 30px rgba(16, 185, 129, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .brand-icon::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: conic-gradient(from 0deg, transparent, rgba(255, 255, 255, 0.3), transparent 30%);
+      animation: rotateGlow 6s linear infinite;
+    }
+
+    @keyframes rotateGlow {
+      to { transform: rotate(360deg); }
+    }
+
+    .brand-icon:hover {
+      transform: scale(1.05) rotate(-3deg);
     }
 
     .brand-icon svg {
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       color: #fff;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
     }
 
     .brand-title {
-      font-size: 1.25rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 500;
+      letter-spacing: -0.025em;
       color: #fff;
       display: flex;
-      align-items: center;
-      gap: 0.4rem;
+      align-items: baseline;
+      gap: 0.5rem;
+      line-height: 1.1;
     }
 
     .brand-title span.badge-llm {
-      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
       font-weight: 700;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
-      color: #34d399;
-      padding: 2px 7px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.18));
+      color: #5eead4;
+      padding: 3px 9px;
       border-radius: 6px;
-      border: 1px solid rgba(52, 211, 153, 0.3);
+      border: 1px solid rgba(94, 234, 212, 0.25);
+      backdrop-filter: blur(10px);
     }
 
     .brand-sub {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: var(--text-muted);
       font-weight: 500;
+      letter-spacing: 0.04em;
+      margin-top: 3px;
+      text-transform: uppercase;
     }
 
     .nav-actions {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.65rem;
     }
 
     .status-pill {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      color: #34d399;
-      font-size: 0.75rem;
+      gap: 0.55rem;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.06));
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      color: #6ee7b7;
+      font-size: 0.74rem;
       font-weight: 600;
-      padding: 5px 12px;
+      letter-spacing: 0.03em;
+      padding: 6px 13px;
       border-radius: 999px;
+      backdrop-filter: blur(10px);
     }
 
     .pulse-dot {
-      width: 7px;
-      height: 7px;
+      position: relative;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
-      background: #10b981;
-      box-shadow: 0 0 10px #10b981;
-      animation: pulse 2s infinite ease-in-out;
+      background: #34d399;
+    }
+
+    .pulse-dot::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      background: #34d399;
+      opacity: 0.4;
+      animation: pulse 2.2s ease-in-out infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
+      0%, 100% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1.4); opacity: 0; }
     }
 
     .btn-ghost {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-soft);
       color: var(--text-muted);
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 600;
-      padding: 6px 13px;
+      padding: 7px 14px;
       border-radius: var(--radius-sm);
       text-decoration: none;
-      transition: all 0.2s ease;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 0.45rem;
+      letter-spacing: 0.01em;
+      backdrop-filter: blur(10px);
     }
 
     .btn-ghost:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
       color: var(--text-main);
-      border-color: rgba(255, 255, 255, 0.2);
+      border-color: rgba(34, 211, 238, 0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(6, 182, 212, 0.15);
     }
 
-    /* Layout */
     .app-container {
-      max-width: 1540px;
+      max-width: 1600px;
       margin: 0 auto;
-      padding: 1.5rem 1.75rem 3rem;
+      padding: 2rem 2rem 4rem;
       display: grid;
-      grid-template-columns: 390px 1fr;
-      gap: 1.5rem;
+      grid-template-columns: 410px 1fr;
+      gap: 1.75rem;
       align-items: start;
     }
 
-    @media (max-width: 1080px) {
+    @media (max-width: 1180px) {
       .app-container {
         grid-template-columns: 1fr;
       }
     }
 
-    /* Cards */
     .glass-card {
       background: var(--bg-surface);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--border-subtle);
+      backdrop-filter: blur(28px) saturate(150%);
+      -webkit-backdrop-filter: blur(28px) saturate(150%);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-lg);
-      padding: 1.35rem;
-      box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.45);
+      padding: 1.6rem;
+      box-shadow: var(--shadow-mid);
       position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    }
+
+    .glass-card-elevated {
+      background: var(--bg-surface-elevated);
     }
 
     .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 1.15rem;
+      margin-bottom: 1.35rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-soft);
     }
 
     .card-title {
-      font-size: 0.95rem;
-      font-weight: 700;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 500;
       color: var(--text-main);
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      letter-spacing: -0.01em;
+      gap: 0.55rem;
+      letter-spacing: -0.015em;
     }
 
     .card-title svg {
-      width: 17px;
-      height: 17px;
-      color: var(--secondary);
+      width: 18px;
+      height: 18px;
+      color: var(--secondary-bright);
     }
 
-    /* Forms & Controls */
+    .card-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+
     .form-group {
-      margin-bottom: 1.1rem;
+      margin-bottom: 1.25rem;
     }
 
     label.form-label {
       display: block;
-      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.12em;
       color: var(--text-muted);
-      margin-bottom: 0.45rem;
+      margin-bottom: 0.55rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
     }
 
-    select.select-custom, textarea.textarea-custom, input.input-custom {
+    label.form-label::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--secondary-bright);
+      box-shadow: 0 0 8px var(--secondary-bright);
+    }
+
+    select.select-custom,
+    textarea.textarea-custom,
+    input.input-custom {
       width: 100%;
-      background: rgba(10, 16, 30, 0.85);
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-inset);
+      border: 1px solid var(--border-soft);
       color: var(--text-main);
       font-family: inherit;
       font-size: 0.85rem;
       border-radius: var(--radius-sm);
-      padding: 0.65rem 0.85rem;
+      padding: 0.75rem 0.95rem;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: all 0.25s ease;
+      backdrop-filter: blur(10px);
     }
 
-    select.select-custom:focus, textarea.textarea-custom:focus, input.input-custom:focus {
-      border-color: var(--secondary);
-      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+    select.select-custom:hover,
+    textarea.textarea-custom:hover,
+    input.input-custom:hover {
+      border-color: var(--border-mid);
+      background: rgba(10, 16, 30, 0.85);
+    }
+
+    select.select-custom:focus,
+    textarea.textarea-custom:focus,
+    input.input-custom:focus {
+      border-color: var(--secondary-bright);
+      box-shadow:
+        0 0 0 4px rgba(6, 182, 212, 0.12),
+        inset 0 0 0 1px rgba(34, 211, 238, 0.1);
+      background: rgba(10, 16, 30, 0.95);
+    }
+
+    select.select-custom {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--secondary-bright) 50%),
+        linear-gradient(135deg, var(--secondary-bright) 50%, transparent 50%);
+      background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      padding-right: 2.5rem;
+      cursor: pointer;
+    }
+
+    select.select-custom option {
+      background: #0a1224;
+      color: var(--text-main);
+      padding: 8px;
     }
 
     textarea.textarea-custom {
-      min-height: 95px;
+      min-height: 110px;
       resize: vertical;
+      line-height: 1.5;
       font-family: var(--font-main);
-      line-height: 1.4;
     }
 
-    /* Battery specs 2-column grid */
+    textarea.textarea-custom::placeholder,
+    input.input-custom::placeholder {
+      color: var(--text-faint);
+      font-style: italic;
+    }
+
     .battery-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 0.6rem;
-      margin-bottom: 1.25rem;
+      gap: 0.7rem;
+      margin-bottom: 1.4rem;
     }
 
     .battery-metric-input {
-      background: rgba(10, 16, 30, 0.5);
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-inset);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-sm);
-      padding: 0.55rem 0.75rem;
+      padding: 0.7rem 0.9rem;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .battery-metric-input::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2px;
+      height: 100%;
+      background: linear-gradient(180deg, var(--primary), var(--secondary));
+      opacity: 0.5;
+      transition: opacity 0.25s ease;
+    }
+
+    .battery-metric-input:focus-within {
+      border-color: var(--secondary-bright);
+      background: rgba(10, 16, 30, 0.9);
+    }
+
+    .battery-metric-input:focus-within::before {
+      opacity: 1;
     }
 
     .battery-metric-input span {
       display: block;
-      font-size: 0.65rem;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
       color: var(--text-dim);
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
     }
 
@@ -298,38 +515,61 @@
       background: transparent;
       border: none;
       outline: none;
-      color: var(--text-main);
+      color: var(--text-bright);
       font-family: var(--font-mono);
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: 600;
       width: 100%;
-      margin-top: 2px;
+      margin-top: 3px;
+      letter-spacing: -0.01em;
     }
 
-    /* CTA Button */
     .btn-optimize {
       width: 100%;
-      background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-      color: #03131c;
+      background: linear-gradient(135deg, #10b981 0%, #06b6d4 60%, #0ea5e9 100%);
+      color: #021014;
       font-family: inherit;
-      font-size: 0.95rem;
-      font-weight: 800;
-      padding: 0.85rem 1.25rem;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      padding: 1rem 1.4rem;
       border-radius: var(--radius-md);
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.55rem;
-      box-shadow: 0 4px 20px var(--primary-glow);
-      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      gap: 0.6rem;
+      box-shadow:
+        0 6px 28px var(--primary-glow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-optimize::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transition: left 0.6s ease;
     }
 
     .btn-optimize:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+      box-shadow:
+        0 12px 40px rgba(16, 185, 129, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
       filter: brightness(1.08);
+    }
+
+    .btn-optimize:hover::before {
+      left: 100%;
     }
 
     .btn-optimize:active {
@@ -337,14 +577,14 @@
     }
 
     .btn-optimize.loading {
-      opacity: 0.8;
+      opacity: 0.85;
       pointer-events: none;
     }
 
     .spinner {
       width: 18px;
       height: 18px;
-      border: 2px solid rgba(0, 0, 0, 0.3);
+      border: 2.5px solid rgba(0, 0, 0, 0.25);
       border-top-color: #000;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
@@ -352,39 +592,32 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Right Column (Results) */
     .results-col {
       display: flex;
       flex-direction: column;
-      gap: 1.35rem;
+      gap: 1.5rem;
     }
 
-    /* Stat KPI Row */
     .kpi-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 0.9rem;
+      gap: 1rem;
     }
 
-    @media (max-width: 900px) {
+    @media (max-width: 920px) {
       .kpi-row { grid-template-columns: 1fr 1fr; }
     }
 
     .kpi-card {
-      background: var(--bg-surface);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      backdrop-filter: blur(28px) saturate(150%);
+      -webkit-backdrop-filter: blur(28px) saturate(150%);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-md);
-      padding: 1rem 1.15rem;
+      padding: 1.2rem 1.35rem;
       position: relative;
       overflow: hidden;
-      transition: transform 0.2s, border-color 0.2s;
-    }
-
-    .kpi-card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-2px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .kpi-card::before {
@@ -393,65 +626,117 @@
       top: 0;
       left: 0;
       width: 100%;
-      height: 3px;
+      height: 2px;
+      opacity: 0.9;
     }
 
-    .kpi-card.cost::before { background: linear-gradient(90deg, #a78bfa, #818cf8); }
-    .kpi-card.grid::before { background: linear-gradient(90deg, #38bdf8, #0284c7); }
-    .kpi-card.peak::before { background: linear-gradient(90deg, #f59e0b, #d97706); }
-    .kpi-card.reserve::before { background: linear-gradient(90deg, #10b981, #059669); }
+    .kpi-card::after {
+      content: '';
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-soft);
+    }
 
-    .kpi-label {
-      font-size: 0.72rem;
-      font-weight: 700;
+    .kpi-card:hover {
+      border-color: var(--border-mid);
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-strong);
+    }
+
+    .kpi-card.cost::before { background: linear-gradient(90deg, #c4b5fd, #818cf8, #6366f1); }
+    .kpi-card.grid::before { background: linear-gradient(90deg, #38bdf8, #0ea5e9, #0284c7); }
+    .kpi-card.peak::before { background: linear-gradient(90deg, #fbbf24, #f59e0b, #d97706); }
+    .kpi-card.reserve::before { background: linear-gradient(90deg, #34d399, #10b981, #059669); }
+
+    .kpi-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 0.35rem;
+      color: var(--text-faint);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
+
+    .kpi-eyebrow .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .kpi-card.cost .kpi-eyebrow .dot { background: #c4b5fd; box-shadow: 0 0 8px #c4b5fd; }
+    .kpi-card.grid .kpi-eyebrow .dot { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
+    .kpi-card.peak .kpi-eyebrow .dot { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+    .kpi-card.reserve .kpi-eyebrow .dot { background: #34d399; box-shadow: 0 0 8px #34d399; }
 
     .kpi-value {
-      font-size: 1.6rem;
-      font-weight: 800;
-      font-family: var(--font-mono);
-      letter-spacing: -0.02em;
+      font-family: var(--font-display);
+      font-size: 2.1rem;
+      font-weight: 400;
+      letter-spacing: -0.04em;
       color: #fff;
+      line-height: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 0.3rem;
     }
 
     .kpi-unit {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-dim);
-      margin-left: 0.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
     }
 
     .kpi-sub {
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       color: var(--text-muted);
-      margin-top: 0.2rem;
+      margin-top: 0.45rem;
+      line-height: 1.4;
     }
 
-    /* Strategy Summary Banner */
     .summary-banner {
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.7));
-      border: 1px solid var(--border-subtle);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(20, 28, 48, 0.7));
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-md);
-      padding: 1rem 1.25rem;
+      padding: 1.1rem 1.35rem;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .summary-banner::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--primary), var(--secondary));
     }
 
     .summary-badge {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.15));
+      border: 1px solid rgba(52, 211, 153, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
     }
 
     .summary-badge svg {
@@ -461,437 +746,582 @@
     }
 
     .summary-text {
-      font-size: 0.85rem;
+      font-size: 0.88rem;
       color: #cbd5e1;
-      line-height: 1.45;
+      line-height: 1.55;
+      letter-spacing: 0.005em;
     }
 
-    /* Tabs Navigation */
+    .summary-text strong {
+      color: #fff;
+      font-weight: 700;
+    }
+
     .tab-bar {
       display: flex;
-      gap: 0.5rem;
-      border-bottom: 1px solid var(--border-subtle);
-      padding-bottom: 0.6rem;
-      margin-bottom: 1.25rem;
+      gap: 0.4rem;
+      border-bottom: 1px solid var(--border-soft);
+      padding-bottom: 0.7rem;
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+
+    .tab-bar::-webkit-scrollbar { display: none; }
 
     .tab-btn {
       background: transparent;
-      border: none;
+      border: 1px solid transparent;
       color: var(--text-muted);
       font-family: inherit;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      padding: 0.5rem 0.9rem;
+      padding: 0.55rem 1rem;
       border-radius: var(--radius-sm);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      white-space: nowrap;
+      letter-spacing: 0.005em;
     }
 
     .tab-btn:hover {
       color: var(--text-main);
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-soft);
     }
 
     .tab-btn.active {
-      color: #22d3ee;
-      background: rgba(6, 182, 212, 0.12);
-      border: 1px solid rgba(6, 182, 212, 0.25);
+      color: #5eead4;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.08));
+      border-color: rgba(34, 211, 238, 0.3);
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.15);
     }
 
     .tab-panel {
       display: none;
+      animation: fadeIn 0.4s ease;
     }
 
     .tab-panel.active {
       display: block;
     }
 
-    /* Charts Container */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .charts-grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 1.5rem;
+      gap: 1.4rem;
+    }
+
+    @media (min-width: 1380px) {
+      .charts-grid { grid-template-columns: 1fr 1fr; }
+      .charts-grid .chart-box:first-child { grid-column: span 2; }
     }
 
     .chart-box {
-      background: rgba(10, 16, 30, 0.6);
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-md);
-      padding: 1.15rem;
+      padding: 1.35rem;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+    }
+
+    .chart-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
     }
 
     .chart-title {
-      font-size: 0.82rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-muted);
-      margin-bottom: 0.85rem;
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-main);
+      margin-bottom: 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      letter-spacing: -0.015em;
+    }
+
+    .chart-meta {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--text-faint);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .chart-canvas-wrap {
       position: relative;
-      height: 250px;
+      height: 280px;
       width: 100%;
     }
 
-    /* Directive Cards */
     .directive-card-grid {
       display: flex;
       flex-direction: column;
-      gap: 0.85rem;
+      gap: 0.95rem;
     }
 
     .directive-card {
-      background: rgba(10, 16, 30, 0.7);
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-md);
-      padding: 1rem 1.2rem;
-      transition: border-color 0.2s;
+      padding: 1.1rem 1.35rem;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .directive-card:hover {
+      border-color: var(--border-mid);
+      transform: translateX(2px);
     }
 
     .directive-card.applies {
-      border-left: 4px solid var(--primary);
+      border-left: 3px solid var(--primary);
     }
 
     .directive-card.no-op {
-      border-left: 4px solid var(--text-dim);
-      opacity: 0.75;
+      border-left: 3px solid var(--text-faint);
+      opacity: 0.78;
     }
 
     .directive-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 0.45rem;
+      margin-bottom: 0.55rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
 
     .directive-type-tag {
-      font-size: 0.75rem;
-      font-weight: 700;
       font-family: var(--font-mono);
-      padding: 3px 9px;
-      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 7px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
     }
 
-    .tag-solar { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
-    .tag-charge { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
-    .tag-discharge { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
-    .tag-reserve { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
-    .tag-grid { background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.3); }
-    .tag-noop { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+    .tag-solar { background: rgba(251, 191, 36, 0.13); color: #fcd34d; border: 1px solid rgba(251, 191, 36, 0.32); }
+    .tag-charge { background: rgba(56, 189, 248, 0.13); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.32); }
+    .tag-discharge { background: rgba(248, 113, 113, 0.13); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.32); }
+    .tag-reserve { background: rgba(52, 211, 153, 0.13); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.32); }
+    .tag-grid { background: rgba(196, 181, 253, 0.13); color: #c4b5fd; border: 1px solid rgba(196, 181, 253, 0.32); }
+    .tag-noop { background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.18); }
+
+    .directive-status {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .directive-status.applied { color: #34d399; }
+    .directive-status.ignored { color: #94a3b8; }
+
+    .directive-status::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
 
     .directive-note-text {
-      font-size: 0.85rem;
+      font-size: 0.92rem;
       font-weight: 500;
       color: #fff;
-      margin-bottom: 0.35rem;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.005em;
+      line-height: 1.5;
+    }
+
+    .directive-note-text::before {
+      content: '"';
+      color: var(--text-faint);
+      margin-right: 2px;
+    }
+    .directive-note-text::after {
+      content: '"';
+      color: var(--text-faint);
+      margin-left: 2px;
+    }
+
+    .directive-explanation {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+      line-height: 1.55;
     }
 
     .directive-details {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
       display: flex;
-      gap: 1.25rem;
-      margin-top: 0.35rem;
+      gap: 1rem;
+      margin-top: 0.7rem;
+      flex-wrap: wrap;
     }
 
-    /* Table */
+    .directive-detail-chip {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-soft);
+      border-radius: 7px;
+      padding: 5px 10px;
+      letter-spacing: 0.01em;
+    }
+
+    .directive-detail-chip strong {
+      color: var(--text-main);
+      font-weight: 700;
+      margin-right: 0.35rem;
+    }
+
     .table-wrap {
       overflow-x: auto;
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-subtle);
-      background: rgba(10, 16, 30, 0.7);
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
     }
 
     table.schedule-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.8rem;
+      font-size: 0.81rem;
       text-align: right;
     }
 
     table.schedule-table th {
-      background: rgba(15, 23, 42, 0.95);
+      background: rgba(7, 11, 20, 0.85);
       color: var(--text-muted);
+      font-family: var(--font-mono);
       font-weight: 700;
-      font-size: 0.7rem;
+      font-size: 0.66rem;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 0.7rem 0.85rem;
-      border-bottom: 1px solid var(--border-subtle);
+      letter-spacing: 0.12em;
+      padding: 0.85rem 0.95rem;
+      border-bottom: 1px solid var(--border-soft);
     }
 
     table.schedule-table td {
-      padding: 0.55rem 0.85rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 0.65rem 0.95rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
       font-family: var(--font-mono);
       color: var(--text-main);
+      transition: background 0.2s ease;
     }
 
-    table.schedule-table tr:hover td {
-      background: rgba(255, 255, 255, 0.03);
+    table.schedule-table tbody tr {
+      transition: background 0.2s ease;
+    }
+
+    table.schedule-table tbody tr:hover td {
+      background: rgba(34, 211, 238, 0.05);
+    }
+
+    table.schedule-table tbody tr:last-child td {
+      border-bottom: none;
     }
 
     .action-badge {
       display: inline-block;
-      font-size: 0.68rem;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
       font-weight: 700;
-      padding: 2px 8px;
+      padding: 3px 9px;
       border-radius: 999px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.08em;
     }
 
-    .badge-charge { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
-    .badge-discharge { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-idle { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+    .badge-charge { background: rgba(6, 182, 212, 0.13); color: #5eead4; border: 1px solid rgba(6, 182, 212, 0.32); }
+    .badge-discharge { background: rgba(16, 185, 129, 0.13); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.32); }
+    .badge-idle { background: rgba(148, 163, 184, 0.07); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.18); }
 
-    /* JSON Viewer */
+    .empty-state {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      padding: 2rem;
+      text-align: center;
+      font-style: italic;
+    }
+
     pre.code-viewer {
-      background: #040810;
-      border: 1px solid var(--border-subtle);
+      background: var(--bg-deep);
+      border: 1px solid var(--border-soft);
       border-radius: var(--radius-md);
-      padding: 1.25rem;
+      padding: 1.4rem;
       font-family: var(--font-mono);
-      font-size: 0.8rem;
-      color: #38bdf8;
+      font-size: 0.78rem;
+      color: #7dd3fc;
       overflow-x: auto;
-      max-height: 480px;
+      max-height: 540px;
+      line-height: 1.55;
     }
 
     .btn-copy {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-soft);
       color: var(--text-main);
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 6px;
+      padding: 5px 12px;
+      border-radius: 8px;
       cursor: pointer;
       float: right;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.6rem;
+      transition: all 0.25s ease;
+      letter-spacing: 0.02em;
     }
 
-    .btn-copy:hover { background: rgba(255, 255, 255, 0.16); }
+    .btn-copy:hover {
+      background: rgba(34, 211, 238, 0.12);
+      border-color: rgba(34, 211, 238, 0.35);
+      color: #5eead4;
+    }
+
+    .footer-note {
+      text-align: center;
+      padding: 2rem 1rem 1rem;
+      font-size: 0.74rem;
+      color: var(--text-faint);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .footer-note span {
+      background: linear-gradient(135deg, #34d399, #22d3ee);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: 700;
+    }
+
+    @media (max-width: 720px) {
+      .app-container { padding: 1.25rem 1rem 3rem; }
+      header.header { padding: 0.85rem 1rem; }
+      .brand-title { font-size: 1.15rem; }
+      .brand-sub { font-size: 0.66rem; }
+      .nav-actions .btn-ghost span { display: none; }
+    }
   </style>
 </head>
 <body>
-
-  <!-- Top Header -->
-  <header class="header">
-    <div class="brand-wrap">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-        </svg>
-      </div>
-      <div>
-        <div class="brand-title">
-          GridWise <span class="badge-llm">LLM</span>
+  <div class="app-shell">
+    <header class="header">
+      <div class="brand-wrap">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
         </div>
-        <div class="brand-sub">Campus Energy Optimization Engine · BUP CSE Fest 2026</div>
-      </div>
-    </div>
-    <div class="nav-actions">
-      <div class="status-pill">
-        <div class="pulse-dot"></div>
-        <span>HiGHS LP Solver Active</span>
-      </div>
-      <a href="/docs" target="_blank" class="btn-ghost">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-        Swagger Docs
-      </a>
-      <a href="/health" target="_blank" class="btn-ghost">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-        Health Probe
-      </a>
-    </div>
-  </header>
-
-  <!-- Main Grid App -->
-  <main class="app-container">
-
-    <!-- Left Controls Panel -->
-    <aside class="glass-card">
-      <div class="card-header">
-        <div class="card-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-          Scenario Config
-        </div>
-        <span id="solving-time" style="font-size:0.75rem; color:#34d399; font-weight:700; font-family:var(--font-mono);"></span>
-      </div>
-
-      <!-- Preset Selector -->
-      <div class="form-group">
-        <label class="form-label">Pre-configured Scenarios (BUP Cases)</label>
-        <select id="preset-selector" class="select-custom">
-          <option value="SAMPLE-01">SAMPLE-01: Solar Cleaning + Distractor</option>
-          <option value="SAMPLE-02">SAMPLE-02: Battery Charging Outage</option>
-          <option value="SAMPLE-03">SAMPLE-03: Emergency Reserve as %</option>
-          <option value="SAMPLE-04">SAMPLE-04: No-Discharge Protection Test</option>
-          <option value="SAMPLE-05">SAMPLE-05: Feeder Grid Import Cap</option>
-          <option value="SAMPLE-06">SAMPLE-06: Multi-Note Cloud + Outage</option>
-          <option value="SAMPLE-07">SAMPLE-07: Reserve + Transformer Limit</option>
-          <option value="SAMPLE-08">SAMPLE-08: Separate Outages (Chg & Dis)</option>
-          <option value="SAMPLE-09">SAMPLE-09: 80% Reduction Wording</option>
-          <option value="SAMPLE-10">SAMPLE-10: Multi-Constraint Evening</option>
-        </select>
-      </div>
-
-      <!-- Operator Notes -->
-      <div class="form-group">
-        <label class="form-label">Natural Language Operator Directives</label>
-        <textarea id="operator-notes" class="textarea-custom" placeholder="One note per line..."></textarea>
-      </div>
-
-      <!-- Battery Config -->
-      <label class="form-label">Battery Storage Parameters</label>
-      <div class="battery-grid">
-        <div class="battery-metric-input">
-          <span>Capacity (kWh)</span>
-          <input type="number" id="batt-capacity" value="220" step="10">
-        </div>
-        <div class="battery-metric-input">
-          <span>Initial (kWh)</span>
-          <input type="number" id="batt-initial" value="110" step="10">
-        </div>
-        <div class="battery-metric-input">
-          <span>Min Reserve (kWh)</span>
-          <input type="number" id="batt-min" value="40" step="5">
-        </div>
-        <div class="battery-metric-input">
-          <span>Max Chg/Dis (kW)</span>
-          <input type="number" id="batt-rate" value="50" step="10">
+        <div>
+          <div class="brand-title">
+            GridWise<span class="badge-llm">LLM</span>
+          </div>
+          <div class="brand-sub">Campus Energy Optimization · BUP CSE Fest 2026</div>
         </div>
       </div>
-
-      <!-- Submit CTA -->
-      <button id="btn-run-optimization" class="btn-optimize" onclick="runOptimization()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>Run Global Optimization</span>
-      </button>
-    </aside>
-
-    <!-- Right Results Panel -->
-    <section class="results-col">
-
-      <!-- KPI Statistics Row -->
-      <div class="kpi-row">
-        <div class="kpi-card cost">
-          <div class="kpi-label">Total Electricity Cost</div>
-          <div class="kpi-value"><span id="kpi-cost">0.00</span><span class="kpi-unit">BDT</span></div>
-          <div class="kpi-sub">Cost-minimizing schedule</div>
+      <div class="nav-actions">
+        <div class="status-pill">
+          <div class="pulse-dot"></div>
+          <span>HiGHS LP Solver Active</span>
         </div>
-        <div class="kpi-card grid">
-          <div class="kpi-label">Total Grid Purchases</div>
-          <div class="kpi-value"><span id="kpi-grid">0.00</span><span class="kpi-unit">kWh</span></div>
-          <div class="kpi-sub">Net grid electricity consumed</div>
-        </div>
-        <div class="kpi-card peak">
-          <div class="kpi-label">Peak Feeder Demand</div>
-          <div class="kpi-value"><span id="kpi-peak">0.00</span><span class="kpi-unit">kWh</span></div>
-          <div class="kpi-sub">Maximum hourly grid import</div>
-        </div>
-        <div class="kpi-card reserve">
-          <div class="kpi-label">Day-End Neutrality</div>
-          <div class="kpi-value"><span id="kpi-eod">0.00</span><span class="kpi-unit">Δ</span></div>
-          <div class="kpi-sub">Initial = Final State of Charge</div>
-        </div>
+        <a href="/docs" target="_blank" class="btn-ghost">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          <span>Swagger</span>
+        </a>
+        <a href="/health?ui=1" target="_blank" class="btn-ghost">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          <span>Health</span>
+        </a>
       </div>
+    </header>
 
-      <!-- Strategy Plan Banner -->
-      <div class="summary-banner">
-        <div class="summary-badge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-        </div>
-        <div class="summary-text" id="plan-summary-text">
-          Select a campus scenario and click <strong>"Run Global Optimization"</strong> to evaluate operator directives and compute the optimal schedule.
-        </div>
-      </div>
-
-      <!-- Glass Tabbed Results Card -->
-      <div class="glass-card">
-        <div class="tab-bar">
-          <button class="tab-btn active" onclick="switchTab('charts')">Visual Analytics & Curves</button>
-          <button class="tab-btn" onclick="switchTab('directives')">Interpreted Directives & Guardrails</button>
-          <button class="tab-btn" onclick="switchTab('table')">24-Hour Hourly Schedule</button>
-          <button class="tab-btn" onclick="switchTab('json')">Raw Response JSON</button>
-        </div>
-
-        <!-- Tab 1: Charts -->
-        <div id="tab-charts" class="tab-panel active">
-          <div class="charts-grid">
-            <div class="chart-box">
-              <div class="chart-title">
-                <span>Hourly Energy Stack (Demand vs Solar vs Battery vs Grid)</span>
-                <span style="color:#94a3b8; font-size:0.7rem;">Stacked kWh / Hour</span>
-              </div>
-              <div class="chart-canvas-wrap">
-                <canvas id="chart-energy"></canvas>
-              </div>
+    <main class="app-container">
+      <aside class="glass-card">
+        <div class="card-header">
+          <div>
+            <span class="card-eyebrow">Configuration</span>
+            <div class="card-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              Scenario Config
             </div>
-            <div class="chart-box">
-              <div class="chart-title">
-                <span>Battery State of Charge & Active Reserve Boundaries</span>
-                <span style="color:#94a3b8; font-size:0.7rem;">Storage (kWh)</span>
-              </div>
-              <div class="chart-canvas-wrap">
-                <canvas id="chart-battery"></canvas>
-              </div>
-            </div>
+          </div>
+          <span id="solving-time" style="font-family:var(--font-mono); font-size:0.74rem; color:#34d399; font-weight:700;"></span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Pre-configured Scenario</label>
+          <select id="preset-selector" class="select-custom">
+            <option value="SAMPLE-01">SAMPLE-01: Solar Cleaning + Distractor</option>
+            <option value="SAMPLE-02">SAMPLE-02: Battery Charging Outage</option>
+            <option value="SAMPLE-03">SAMPLE-03: Emergency Reserve as %</option>
+            <option value="SAMPLE-04">SAMPLE-04: No-Discharge Protection Test</option>
+            <option value="SAMPLE-05">SAMPLE-05: Feeder Grid Import Cap</option>
+            <option value="SAMPLE-06">SAMPLE-06: Multi-Note Cloud + Outage</option>
+            <option value="SAMPLE-07">SAMPLE-07: Reserve + Transformer Limit</option>
+            <option value="SAMPLE-08">SAMPLE-08: Separate Outages (Chg & Dis)</option>
+            <option value="SAMPLE-09">SAMPLE-09: 80% Reduction Wording</option>
+            <option value="SAMPLE-10">SAMPLE-10: Multi-Constraint Evening</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Operator Directives</label>
+          <textarea id="operator-notes" class="textarea-custom" placeholder="One natural-language directive per line..."></textarea>
+        </div>
+
+        <label class="form-label">Battery Storage Parameters</label>
+        <div class="battery-grid">
+          <div class="battery-metric-input">
+            <span>Capacity (kWh)</span>
+            <input type="number" id="batt-capacity" value="220" step="10">
+          </div>
+          <div class="battery-metric-input">
+            <span>Initial (kWh)</span>
+            <input type="number" id="batt-initial" value="110" step="10">
+          </div>
+          <div class="battery-metric-input">
+            <span>Min Reserve (kWh)</span>
+            <input type="number" id="batt-min" value="40" step="5">
+          </div>
+          <div class="battery-metric-input">
+            <span>Rate (kW)</span>
+            <input type="number" id="batt-rate" value="50" step="10">
           </div>
         </div>
 
-        <!-- Tab 2: Directives -->
-        <div id="tab-directives" class="tab-panel">
-          <div id="directives-container" class="directive-card-grid">
-            <div style="color:var(--text-muted); font-size:0.85rem; padding:1.5rem; text-align:center;">
-              Run optimization to view LLM directive interpretations and guardrail validations.
+        <button id="btn-run-optimization" class="btn-optimize" onclick="runOptimization()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>Run Global Optimization</span>
+        </button>
+      </aside>
+
+      <section class="results-col">
+        <div class="kpi-row">
+          <div class="kpi-card cost">
+            <div class="kpi-eyebrow"><span class="dot"></span>Electricity Cost</div>
+            <div class="kpi-value"><span id="kpi-cost">0.00</span><span class="kpi-unit">BDT</span></div>
+            <div class="kpi-sub">Cost-minimizing 24-hour schedule</div>
+          </div>
+          <div class="kpi-card grid">
+            <div class="kpi-eyebrow"><span class="dot"></span>Grid Purchases</div>
+            <div class="kpi-value"><span id="kpi-grid">0.00</span><span class="kpi-unit">kWh</span></div>
+            <div class="kpi-sub">Net electricity drawn from grid</div>
+          </div>
+          <div class="kpi-card peak">
+            <div class="kpi-eyebrow"><span class="dot"></span>Peak Demand</div>
+            <div class="kpi-value"><span id="kpi-peak">0.00</span><span class="kpi-unit">kWh</span></div>
+            <div class="kpi-sub">Maximum hourly grid import</div>
+          </div>
+          <div class="kpi-card reserve">
+            <div class="kpi-eyebrow"><span class="dot"></span>Day-End Neutrality</div>
+            <div class="kpi-value"><span id="kpi-eod">0.00</span><span class="kpi-unit">Δ</span></div>
+            <div class="kpi-sub">Initial vs Final state of charge</div>
+          </div>
+        </div>
+
+        <div class="summary-banner">
+          <div class="summary-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          </div>
+          <div class="summary-text" id="plan-summary-text">
+            Select a campus scenario and click <strong>"Run Global Optimization"</strong> to evaluate operator directives and compute the optimal 24-hour schedule.
+          </div>
+        </div>
+
+        <div class="glass-card glass-card-elevated">
+          <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('charts', this)">Visual Analytics</button>
+            <button class="tab-btn" onclick="switchTab('directives', this)">Directives & Guardrails</button>
+            <button class="tab-btn" onclick="switchTab('table', this)">24-Hour Schedule</button>
+            <button class="tab-btn" onclick="switchTab('json', this)">Response JSON</button>
+          </div>
+
+          <div id="tab-charts" class="tab-panel active">
+            <div class="charts-grid">
+              <div class="chart-box">
+                <div class="chart-title">
+                  <span>Hourly Energy Stack</span>
+                  <span class="chart-meta">Demand · Solar · Battery · Grid</span>
+                </div>
+                <div class="chart-canvas-wrap">
+                  <canvas id="chart-energy"></canvas>
+                </div>
+              </div>
+              <div class="chart-box">
+                <div class="chart-title">
+                  <span>State of Charge</span>
+                  <span class="chart-meta">Battery Reserve · Capacity</span>
+                </div>
+                <div class="chart-canvas-wrap">
+                  <canvas id="chart-battery"></canvas>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Tab 3: Table -->
-        <div id="tab-table" class="tab-panel">
-          <div class="table-wrap">
-            <table class="schedule-table">
-              <thead>
-                <tr>
-                  <th style="text-align:left;">Hour</th>
-                  <th>Tariff (BDT)</th>
-                  <th>Demand (kWh)</th>
-                  <th>Solar Used</th>
-                  <th style="text-align:center;">Action</th>
-                  <th>Battery Flow</th>
-                  <th>Battery SOC</th>
-                  <th>Grid Import</th>
-                </tr>
-              </thead>
-              <tbody id="table-body">
-                <tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">No optimization run yet.</td></tr>
-              </tbody>
-            </table>
+          <div id="tab-directives" class="tab-panel">
+            <div id="directives-container" class="directive-card-grid">
+              <div class="empty-state">Run optimization to view LLM directive interpretations and guardrail validations.</div>
+            </div>
+          </div>
+
+          <div id="tab-table" class="tab-panel">
+            <div class="table-wrap">
+              <table class="schedule-table">
+                <thead>
+                  <tr>
+                    <th style="text-align:left;">Hour</th>
+                    <th>Tariff</th>
+                    <th>Demand</th>
+                    <th>Solar</th>
+                    <th style="text-align:center;">Action</th>
+                    <th>Flow</th>
+                    <th>SOC</th>
+                    <th>Grid</th>
+                  </tr>
+                </thead>
+                <tbody id="table-body">
+                  <tr><td colspan="8" class="empty-state">No optimization run yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="tab-json" class="tab-panel">
+            <button class="btn-copy" onclick="copyJson()">Copy JSON</button>
+            <pre id="json-viewer" class="code-viewer">Run the optimizer to inspect the JSON response payload.</pre>
           </div>
         </div>
 
-        <!-- Tab 4: JSON -->
-        <div id="tab-json" class="tab-panel">
-          <button class="btn-copy" onclick="copyJson()">Copy Output JSON</button>
-          <pre id="json-viewer" class="code-viewer">// Execute optimization to inspect full JSON response payload...</pre>
+        <div class="footer-note">
+          Crafted for <span>BUP CSE Fest 2026</span> · GridWise LLM Optimization Engine
         </div>
-
-      </div>
-
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 
   <script>
     let currentData = null;
@@ -899,7 +1329,6 @@
     let batteryChart = null;
     let PRESETS = {};
 
-    // Load presets on init
     async function initPresets() {
       try {
         const res = await fetch('/api/presets');
@@ -916,14 +1345,11 @@
       const preset = PRESETS[id];
       if (!preset) return;
       const inp = preset.input;
-      
       document.getElementById('operator-notes').value = inp.operator_notes.join('\n');
       document.getElementById('batt-capacity').value = inp.battery.capacity_kwh;
       document.getElementById('batt-initial').value = inp.battery.initial_energy_kwh;
       document.getElementById('batt-min').value = inp.battery.minimum_energy_kwh;
       document.getElementById('batt-rate').value = inp.battery.max_charge_kwh_per_hour;
-
-      // Automatically execute preview
       runOptimization();
     }
 
@@ -931,10 +1357,14 @@
       loadPreset(e.target.value);
     });
 
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+      if (btn) btn.classList.add('active');
+      else {
+        const target = document.querySelector(`.tab-btn[onclick*="${tabId}"]`);
+        if (target) target.classList.add('active');
+      }
       document.getElementById(`tab-${tabId}`).classList.add('active');
     }
 
@@ -943,7 +1373,7 @@
       const timeSpan = document.getElementById('solving-time');
       btn.classList.add('loading');
       btn.innerHTML = `<div class="spinner"></div><span>Solving with HiGHS LP...</span>`;
-      
+
       const scenarioId = document.getElementById('preset-selector').value;
       const notesRaw = document.getElementById('operator-notes').value.trim();
       const notes = notesRaw.split('\n').map(n => n.trim()).filter(n => n.length > 0);
@@ -953,10 +1383,8 @@
       const minReserve = parseFloat(document.getElementById('batt-min').value);
       const rate = parseFloat(document.getElementById('batt-rate').value);
 
-      // Grab hours from active preset if available
       let hours = PRESETS[scenarioId]?.input?.hours;
       if (!hours || hours.length !== 24) {
-        // Fallback default 24h curve
         hours = Array.from({length: 24}, (_, i) => ({
           hour: i,
           demand_kwh: i >= 8 && i <= 18 ? 160 : 80,
@@ -1007,17 +1435,18 @@
     }
 
     function renderResults(data, req) {
-      // 1. KPIs
-      document.getElementById('kpi-cost').innerText = Number(data.total_cost_bdt).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-      document.getElementById('kpi-grid').innerText = Number(data.total_grid_kwh).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1});
-      document.getElementById('kpi-peak').innerText = Number(data.peak_grid_kwh).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1});
-      
+      const fmtMoney = (v) => Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      const fmtKwh = (v) => Number(v).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+
+      document.getElementById('kpi-cost').innerText = fmtMoney(data.total_cost_bdt);
+      document.getElementById('kpi-grid').innerText = fmtKwh(data.total_grid_kwh);
+      document.getElementById('kpi-peak').innerText = fmtKwh(data.peak_grid_kwh);
+
       const lastSOC = data.hourly_plan[23].battery_energy_after_kwh;
       const eodDiff = Math.abs(lastSOC - req.battery.initial_energy_kwh);
       document.getElementById('kpi-eod').innerText = eodDiff < 0.001 ? '0.00' : eodDiff.toFixed(2);
       document.getElementById('plan-summary-text').innerText = data.plan_summary;
 
-      // 2. Directives Cards
       const dContainer = document.getElementById('directives-container');
       dContainer.innerHTML = '';
       data.directive_interpretation.forEach((d, idx) => {
@@ -1032,32 +1461,37 @@
         else if (d.directive_type === 'minimum_battery_reserve') tagClass = 'tag-reserve';
         else if (d.directive_type === 'max_grid_window') tagClass = 'tag-grid';
 
-        let adjDetails = '';
+        let adjChips = '';
         if (d.structured_adjustment) {
           const sa = d.structured_adjustment;
-          const hStr = sa.hours && sa.hours.length ? `Hours: [${sa.hours.join(', ')}]` : '';
-          let paramStr = '';
-          if (sa.factor !== undefined) paramStr = `Factor: ${sa.factor} (${Math.round((1-sa.factor)*100)}% curtailment)`;
-          if (sa.minimum_energy_kwh !== undefined) paramStr = `Min Reserve: ${sa.minimum_energy_kwh} kWh`;
-          if (sa.max_grid_kwh !== undefined) paramStr = `Max Grid: ${sa.max_grid_kwh} kWh`;
-          adjDetails = `<div class="directive-details"><span>${hStr}</span><span>${paramStr}</span></div>`;
+          if (sa.hours && sa.hours.length) {
+            adjChips += `<span class="directive-detail-chip"><strong>Hours</strong>[${sa.hours.join(', ')}]</span>`;
+          }
+          if (sa.factor !== undefined) {
+            adjChips += `<span class="directive-detail-chip"><strong>Factor</strong>${sa.factor} · ${Math.round((1-sa.factor)*100)}% curtailment</span>`;
+          }
+          if (sa.minimum_energy_kwh !== undefined) {
+            adjChips += `<span class="directive-detail-chip"><strong>Min Reserve</strong>${sa.minimum_energy_kwh} kWh</span>`;
+          }
+          if (sa.max_grid_kwh !== undefined) {
+            adjChips += `<span class="directive-detail-chip"><strong>Max Grid</strong>${sa.max_grid_kwh} kWh</span>`;
+          }
         }
 
         card.innerHTML = `
           <div class="directive-header">
             <span class="directive-type-tag ${tagClass}">${d.directive_type}</span>
-            <span style="font-size:0.72rem; color:${d.applies ? '#34d399' : '#94a3b8'}; font-weight:700;">
-              ${d.applies ? '● APPLIES' : '○ NO-OP (IGNORED)'}
+            <span class="directive-status ${d.applies ? 'applied' : 'ignored'}">
+              ${d.applies ? 'APPLIES' : 'NO-OP · IGNORED'}
             </span>
           </div>
-          <div class="directive-note-text">"${note}"</div>
-          <div style="font-size:0.75rem; color:var(--text-dim); margin-top:3px;">${d.explanation}</div>
-          ${adjDetails}
+          <div class="directive-note-text">${note}</div>
+          <div class="directive-explanation">${d.explanation}</div>
+          ${adjChips ? `<div class="directive-details">${adjChips}</div>` : ''}
         `;
         dContainer.appendChild(card);
       });
 
-      // 3. Hourly Table
       const tBody = document.getElementById('table-body');
       tBody.innerHTML = '';
       data.hourly_plan.forEach(p => {
@@ -1070,21 +1504,18 @@
 
         tr.innerHTML = `
           <td style="text-align:left; font-weight:600; color:#fff;">${String(p.hour).padStart(2, '0')}:00</td>
-          <td style="color:#a78bfa;">${hReq.tariff_bdt_per_kwh.toFixed(1)}</td>
+          <td style="color:#c4b5fd;">${hReq.tariff_bdt_per_kwh.toFixed(1)}</td>
           <td>${hReq.demand_kwh.toFixed(1)}</td>
           <td style="color:#fbbf24;">${p.solar_used_kwh.toFixed(1)}</td>
           <td style="text-align:center;"><span class="action-badge ${badgeClass}">${p.battery_action}</span></td>
           <td>${p.battery_kwh.toFixed(1)}</td>
           <td style="color:#34d399; font-weight:700;">${p.battery_energy_after_kwh.toFixed(1)}</td>
-          <td style="color:#38bdf8; font-weight:700;">${p.grid_kwh.toFixed(1)}</td>
+          <td style="color:#7dd3fc; font-weight:700;">${p.grid_kwh.toFixed(1)}</td>
         `;
         tBody.appendChild(tr);
       });
 
-      // 4. Raw JSON
       document.getElementById('json-viewer').innerText = JSON.stringify(data, null, 2);
-
-      // 5. Render Charts
       renderCharts(data, req);
     }
 
@@ -1097,7 +1528,6 @@
       const charges = data.hourly_plan.map(p => p.battery_action === 'charge' ? p.battery_kwh : 0);
       const socs = data.hourly_plan.map(p => p.battery_energy_after_kwh);
 
-      // Chart 1: Energy Stack
       const ctx1 = document.getElementById('chart-energy').getContext('2d');
       if (energyChart) energyChart.destroy();
 
@@ -1110,37 +1540,52 @@
               type: 'line',
               label: 'Demand (kWh)',
               data: demands,
-              borderColor: '#f43f5e',
-              borderWidth: 2.2,
-              tension: 0.3,
-              pointRadius: 2,
+              borderColor: '#f87171',
+              borderWidth: 2.4,
+              tension: 0.35,
+              pointRadius: 2.5,
+              pointBackgroundColor: '#f87171',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 1,
               order: 1
             },
             {
               label: 'Solar Used (kWh)',
               data: solars,
-              backgroundColor: 'rgba(251, 191, 36, 0.85)',
+              backgroundColor: 'rgba(251, 191, 36, 0.88)',
+              borderColor: 'rgba(251, 191, 36, 0.4)',
+              borderWidth: 1,
+              borderRadius: 4,
               stack: 'supply',
               order: 2
             },
             {
               label: 'Battery Discharge (kWh)',
               data: discharges,
-              backgroundColor: 'rgba(52, 211, 153, 0.85)',
+              backgroundColor: 'rgba(52, 211, 153, 0.88)',
+              borderColor: 'rgba(52, 211, 153, 0.4)',
+              borderWidth: 1,
+              borderRadius: 4,
               stack: 'supply',
               order: 2
             },
             {
               label: 'Grid Purchase (kWh)',
               data: grids,
-              backgroundColor: 'rgba(56, 189, 248, 0.85)',
+              backgroundColor: 'rgba(56, 189, 248, 0.88)',
+              borderColor: 'rgba(56, 189, 248, 0.4)',
+              borderWidth: 1,
+              borderRadius: 4,
               stack: 'supply',
               order: 2
             },
             {
-              label: 'Battery Charge (Load) (kWh)',
+              label: 'Battery Charge (kWh)',
               data: charges,
-              backgroundColor: 'rgba(168, 85, 247, 0.65)',
+              backgroundColor: 'rgba(196, 181, 253, 0.7)',
+              borderColor: 'rgba(196, 181, 253, 0.4)',
+              borderWidth: 1,
+              borderRadius: 4,
               stack: 'demand_extra',
               order: 3
             }
@@ -1152,23 +1597,42 @@
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: {
-              labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } }
+              position: 'bottom',
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'Plus Jakarta Sans', size: 11, weight: '500' },
+                padding: 14,
+                usePointStyle: true,
+                pointStyle: 'circle',
+                boxWidth: 8,
+                boxHeight: 8
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(7, 11, 20, 0.95)',
+              titleColor: '#fff',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8,
+              titleFont: { family: 'JetBrains Mono', weight: '700', size: 12 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
             }
           },
           scales: {
             x: {
-              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
               ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
             },
             y: {
-              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
               ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
             }
           }
         }
       });
 
-      // Chart 2: Battery State of Charge
       const ctx2 = document.getElementById('chart-battery').getContext('2d');
       if (batteryChart) batteryChart.destroy();
 
@@ -1178,30 +1642,32 @@
           labels: labels,
           datasets: [
             {
-              label: 'Battery Energy (kWh)',
+              label: 'Battery SOC (kWh)',
               data: socs,
-              borderColor: '#10b981',
-              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+              borderColor: '#34d399',
+              backgroundColor: 'rgba(52, 211, 153, 0.18)',
               fill: true,
-              borderWidth: 2.5,
+              borderWidth: 2.6,
               tension: 0.35,
               pointRadius: 3,
-              pointBackgroundColor: '#10b981'
+              pointBackgroundColor: '#34d399',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 1.2
             },
             {
-              label: 'Min Base Reserve',
+              label: 'Min Reserve',
               data: Array(24).fill(req.battery.minimum_energy_kwh),
-              borderColor: 'rgba(248, 113, 113, 0.7)',
-              borderDash: [5, 5],
+              borderColor: 'rgba(248, 113, 113, 0.75)',
+              borderDash: [6, 5],
               borderWidth: 1.5,
               pointRadius: 0,
               fill: false
             },
             {
-              label: 'Battery Capacity',
+              label: 'Capacity',
               data: Array(24).fill(req.battery.capacity_kwh),
-              borderColor: 'rgba(148, 163, 184, 0.5)',
-              borderDash: [3, 3],
+              borderColor: 'rgba(148, 163, 184, 0.55)',
+              borderDash: [3, 4],
               borderWidth: 1.2,
               pointRadius: 0,
               fill: false
@@ -1214,18 +1680,38 @@
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: {
-              labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 11 } }
+              position: 'bottom',
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'Plus Jakarta Sans', size: 11, weight: '500' },
+                padding: 14,
+                usePointStyle: true,
+                pointStyle: 'circle',
+                boxWidth: 8,
+                boxHeight: 8
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(7, 11, 20, 0.95)',
+              titleColor: '#fff',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 8,
+              titleFont: { family: 'JetBrains Mono', weight: '700', size: 12 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
             }
           },
           scales: {
             x: {
-              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
               ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
             },
             y: {
               min: 0,
               max: req.battery.capacity_kwh * 1.1,
-              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
               ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
             }
           }
@@ -1239,9 +1725,7 @@
       alert('Optimization JSON copied to clipboard!');
     }
 
-    // Initialize
     window.addEventListener('DOMContentLoaded', initPresets);
   </script>
 </body>
 </html>
-

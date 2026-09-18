@@ -1,195 +1,152 @@
-# GridWise LLM - Smart Campus Energy Optimization
+# GridWise LLM
 
-**Event**: BUP CSE Fest 2026 Hackathon · Online Preliminary  
-**Service**: LLM-Assisted Campus Microgrid Energy Optimization  
-**Endpoints**: `GET /health` | `POST /optimize-energy`  
+A premium FastAPI service for LLM-assisted campus microgrid energy optimization. GridWise interprets natural-language operator directives, validates them through structured guardrails, and solves the resulting 24-hour battery scheduling problem with the HiGHS linear-programming solver. Built for the **BUP CSE Fest 2026 Hackathon**.
 
----
+## Highlights
 
-## 1. Architecture Overview
+- **LLM-powered directive interpretation** with deterministic NLP fallback (no API key required).
+- **Exact linear optimization** through `scipy.optimize.linprog` (HiGHS method).
+- **Premium dark dashboard** with glass-morphism, animated accents, and refined typography.
+- **Guardrail validation** for directive types, time windows, battery limits, and grid caps.
+- **Multiple API surfaces**: live dashboard, Swagger UI, health probe, CSV export, and analytics.
 
-The system operates as a robust multi-stage pipeline:
-```
-[Campus Energy Scenario + Operator Notes]
-                    │
-                    ▼
-       [Stage 1: LLM Interpreter]
-       (Google Gemini with NLP Fallback)
-                    │
-                    ▼
-       [Stage 2: Deterministic Guardrails]
-       (Schema, Enum, Time Window & Bound Validation)
-                    │
-                    ▼
-       [Stage 3: Mathematical Optimizer]
-       (Exact Linear Programming via HiGHS / SciPy)
-                    │
-                    ▼
-       [Stage 4: Post-Processing & Validation]
-       (Energy Balance, Neutrality & Totals)
-                    │
-                    ▼
-            [API Response]
-```
+## Live Surfaces
 
-1. **LLM Interpreter**: Translates 1–3 natural-language operator notes into structured directives (`solar_reduction`, `minimum_battery_reserve`, `no_charge_window`, `no_discharge_window`, `max_grid_window`, or `no_op`).
-2. **Deterministic Guardrails**: Validates and normalizes directive parameters (ascending unique hours 0–23, clamped values, applies flags). If the LLM output is malformed or offline, a verified NLP extractor guarantees seamless fallback.
-3. **Mathematical Optimizer**: Formulates the 24-hour campus scheduling problem as an exact Linear Program solved via the HiGHS solver in `scipy.optimize.linprog`. Enforces strict hourly energy balance ($g_h + s_h + d_h - c_h = D_h$), rate limits, storage boundaries, and end-of-day battery neutrality ($E_{23} = E_0$).
-4. **Post-Processing**: Ensures mutual exclusivity between battery charging and discharging, and re-derives exact numerical figures to guarantee zero constraint violations.
+| Surface | URL | Purpose |
+| --- | --- | --- |
+| Live Dashboard | `/` | Configure scenarios, run optimization, inspect charts and hourly results |
+| Swagger API Reference | `/docs` | Explore and execute OpenAPI operations |
+| Health UI | `/health?ui=1` | Service readiness, runtime version, solver, and LLM configuration |
+| Health JSON | `/health` | Machine-readable readiness probe returning `{"status":"ok"}` |
+| Runtime Status | `/api/status` | Non-secret service and solver metadata |
 
----
+All surfaces share a unified visual system: deep navy glass panels, green-to-cyan accents, monospace metrics, and responsive layouts.
 
-## 2. API Contract
+## API Contract
 
-### Endpoints
+| Method | Endpoint | Description | Success |
+| --- | --- | --- | --- |
+| `GET` | `/health` | Service readiness probe | `200 OK` |
+| `POST` | `/optimize-energy` | Interpret notes and optimize the 24-hour schedule | `200 OK` |
+| `POST` | `/api/analyze` | Optimization plus savings, warnings, and hourly insights | `200 OK` |
+| `POST` | `/api/export-csv` | Download the optimized schedule as CSV | `200 OK` |
 
-| Method | Endpoint | Description | Expected Status |
-|--------|----------|-------------|-----------------|
-| `GET` | `/health` | Service readiness probe | `200 OK` (`{"status": "ok"}`) |
-| `POST` | `/optimize-energy` | 24-hour LLM interpretation & schedule optimization | `200 OK` |
+Invalid payloads return `422`. Controlled processing failures return `500` without credentials or stack traces.
 
-### Error Codes
-- `200`: Successful health or optimization response.
-- `422`: Structurally invalid or malformed request payload.
-- `500`: Controlled internal error (credentials and stack traces are never exposed).
+## Local Setup
 
----
-
-## 3. Local Quickstart
-
-### Prerequisites
-- Python 3.10+ (tested on Python 3.11, 3.12, 3.14)
-- (Optional) Google Gemini API Key
-
-### Step-by-Step Setup
+**Requirements**: Python 3.10 or newer. A Google Gemini API key is optional — the service includes a deterministic NLP fallback so the dashboard and API remain fully usable without one.
 
 ```bash
-# 1. Clone repository & enter directory
 git clone <YOUR_REPO_URL>
 cd Gridwise-LLM-BUP
-
-# 2. Create and activate virtual environment
 python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment variables
-# Copy .env.example to .env and set your key:
-cp .env.example .env
 ```
 
-### Running the Service
+Activate the environment:
+
+```powershell
+.venv\Scripts\activate
+```
 
 ```bash
-# Start server with Uvicorn
+source .venv/bin/activate
+```
+
+Install dependencies and start the server:
+
+```bash
+pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
----
+Open the live dashboard at [http://localhost:8000](http://localhost:8000).
 
-## 4. Configuration & Environment Variables
+## Configuration
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the project root:
 
 ```env
-# Google Gemini API Key (Optional for offline testing; required for live model calls)
 GEMINI_API_KEY=your_gemini_api_key_here
-
-# Model identifier (Default: gemini-1.5-flash)
-GEMINI_MODEL=gemini-1.5-flash
-
-# Service Port (Default: 8000)
+GEMINI_MODEL=gemini-3.5-flash
 PORT=8000
 ```
 
-> **Security Note**: Never commit API keys or `.env` files to the repository. The application redacts error details in 500 responses to prevent secret exposure.
+Available tunables:
 
----
+- `GEMINI_API_KEY` — Enables LLM-driven directive interpretation.
+- `GEMINI_MODEL` — Primary Gemini model name.
+- `GEMINI_FALLBACK_MODELS` — Comma-separated fallback models.
+- `LLM_TIMEOUT_SECONDS` — Per-request LLM timeout (default `12`).
+- `PORT` — HTTP port for the service (default `8000`).
 
-## 5. Sample API Testing
+The service has a deterministic NLP fallback, so the dashboard and API remain usable without a Gemini key. Never commit `.env` or API keys.
 
-### Test Readiness Endpoint
+## Example Requests
+
+Readiness probe:
+
 ```bash
-curl -X GET http://localhost:8000/health
-```
-**Expected Response**:
-```json
-{"status": "ok"}
+curl http://localhost:8000/health
 ```
 
-### Test Energy Optimization Endpoint
+Optimization:
+
 ```bash
 curl -X POST http://localhost:8000/optimize-energy \
   -H "Content-Type: application/json" \
   -d @sample_request.json
 ```
 
-**Sample Request Shape**:
-```json
-{
-  "scenario_id": "SAMPLE-01",
-  "operator_notes": [
-    "Facilities will wash the rooftop solar panels from noon until 2 PM. During cleaning, usable solar should be treated as roughly 25% of the forecast.",
-    "The sports office moved next month's registration deadline."
-  ],
-  "hours": [
-    {"hour": 0, "demand_kwh": 90, "solar_kwh": 0, "tariff_bdt_per_kwh": 6},
-    ...
-  ],
-  "battery": {
-    "capacity_kwh": 220,
-    "initial_energy_kwh": 110,
-    "minimum_energy_kwh": 40,
-    "max_charge_kwh_per_hour": 50,
-    "max_discharge_kwh_per_hour": 50
-  }
-}
-```
+The sample request contains a 24-hour demand and solar profile, operator notes, and battery limits. The response includes interpreted directives, hourly battery actions, grid purchases, total cost, and peak grid import.
 
----
+## Processing Pipeline
 
-## 6. Docker Fallback Deployment
+1. **Interpretation** — Gemini parses each operator note into a structured directive, with a deterministic NLP fallback.
+2. **Guardrails** — Directive types, hour windows, battery consistency, and grid caps are validated.
+3. **Optimization** — A 24-hour linear program is solved exactly with `scipy.optimize.linprog` (HiGHS).
+4. **Post-processing** — Energy balance, mutual exclusivity, day-end neutrality, and response validation.
 
-A tested Docker container image is provided for reproducible testing.
+## Supported Directive Types
 
-### Build Docker Image
+- `solar_reduction` — Reduce rooftop solar output during specific hours.
+- `minimum_battery_reserve` — Enforce a minimum battery reserve during specific hours.
+- `no_charge_window` — Disable battery charging during specific hours.
+- `no_discharge_window` — Disable battery discharging during specific hours.
+- `max_grid_window` — Cap grid import during specific hours.
+- `no_op` — Note does not affect the schedule (cafeteria, library, seminar, etc.).
+
+## Docker
+
 ```bash
 docker build -t gridwise-llm:latest .
-```
-
-### Run Docker Container
-```bash
-docker run -d --name gridwise-service \
-  -p 8000:8000 \
-  -e GEMINI_API_KEY="" \
-  -e PORT=8000 \
-  gridwise-llm:latest
-```
-
-### Test Container Health
-```bash
+docker run -d --name gridwise-service -p 8000:8000 -e GEMINI_API_KEY="" -e PORT=8000 gridwise-llm:latest
 curl http://localhost:8000/health
 ```
 
----
+## Project Structure
 
-## 7. Dependencies & Solver
+```
+Gridwise-LLM-BUP/
+├── main.py                     # FastAPI app, LP solver, directive parsing
+├── requirements.txt            # Python dependencies
+├── Dockerfile                  # Container build
+├── sample_request.json         # Example payload for /optimize-energy
+├── static_presets.json         # Fallback preset definitions
+├── static/
+│   └── index.html              # Premium dashboard UI
+└── Question/
+    └── BUP_CSE_FEST_2026_*.json # Public sample cases
+```
 
-- **Framework**: `FastAPI` + `Uvicorn`
-- **Data Validation**: `Pydantic v2`
-- **Generative AI**: `google-generativeai` (Gemini Flash)
-- **Optimization Solver**: `SciPy` (HiGHS Simplex / Dual Simplex / Interior Point solver)
-- **Mathematical Array Processing**: `NumPy`
+## Dependencies
 
----
+- **FastAPI** and **Uvicorn** — HTTP server and ASGI runtime.
+- **Pydantic v2** — Request and response validation.
+- **Google Generative AI SDK** — LLM directive interpretation.
+- **NumPy** and **SciPy** — Linear programming with the HiGHS solver.
+- **python-dotenv** — Local environment variable loading.
 
-## 8. Known Limitations & Notes
+## License
 
-- Optimization assumes hourly discrete intervals ($t = 0 \dots 23$).
-- Solar energy cannot be exported back to the grid (unused solar is curtailed according to challenge rules).
-- The fallback NLP parser ensures 100% test coverage even if network or API quotas fail.
+Released under the [MIT License](./LICENSE).

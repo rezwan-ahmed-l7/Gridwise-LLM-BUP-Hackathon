@@ -1,18 +1,3 @@
-"""
-GridWise LLM - BUP CSE Fest 2026 Hackathon Preliminary
-Smart Campus Energy Optimization with LLM-assisted Operator Directive Interpretation
-
-v1.1.0 changes (see README "What's new"):
-  * Fixed: "reduced by 60%" style notes no longer fall back to a 50% default
-  * Added: overnight time windows ("10 PM to 2 AM", "until midnight")
-  * Added: battery consistency validation (422 instead of a solver crash)
-  * Added: graceful handling of infeasible max_grid_window directives
-  * Added: Gemini model fallback chain + request timeout (gemini-1.5-flash is retired)
-  * Added: POST /api/analyze  (savings vs no-battery baseline, per-hour constraints, warnings)
-  * Added: POST /api/export-csv, GET /api/status
-  * /optimize-energy request/response contract is UNCHANGED.
-"""
-
 import csv
 import io
 import json
@@ -25,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, Response
 from pydantic import (
     BaseModel,
@@ -37,16 +23,10 @@ from scipy.optimize import linprog
 
 load_dotenv()
 
-# ------------------ Logging ------------------
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gridwise")
 
-# ------------------ Config ------------------
-
 APP_VERSION = "1.1.0"
-
-# gemini-1.5-flash has been shut down; use a current model and keep older ones as fallbacks.
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 DEFAULT_GEMINI_FALLBACKS = "gemini-2.5-flash"
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "12"))
@@ -55,6 +35,8 @@ app = FastAPI(
     title="GridWise LLM",
     description="BUP CSE Fest 2026 - Smart Campus Energy Optimization Engine",
     version=APP_VERSION,
+    docs_url=None,
+    redoc_url=None,
     swagger_ui_parameters={
         "syntaxHighlight.theme": "obsidian",
         "defaultModelsExpandDepth": -1,
@@ -63,10 +45,7 @@ app = FastAPI(
 
 
 class InfeasibleScheduleError(Exception):
-    """Raised when the LP has no feasible schedule for the given scenario."""
-
-
-# ------------------ Models ------------------
+    pass
 
 
 class HourData(BaseModel):
@@ -85,8 +64,6 @@ class BatteryData(BaseModel):
 
     @model_validator(mode="after")
     def check_consistency(self):
-        # Without these checks the LP is infeasible (E_23 must equal initial energy)
-        # and the API used to answer with a confusing 500.
         if self.minimum_energy_kwh > self.capacity_kwh:
             raise ValueError("minimum_energy_kwh cannot exceed capacity_kwh")
         if not (
@@ -124,7 +101,6 @@ class StructuredAdjustment(BaseModel):
     @model_serializer(mode="wrap")
     def serialize_adjustment(self, handler):
         data = handler(self)
-        # Exclude null fields inside structured_adjustment
         return {k: v for k, v in data.items() if v is not None}
 
 
@@ -162,16 +138,13 @@ class OptimizeResponse(BaseModel):
     plan_summary: str
 
 
-# ---- New (v1.1) response models used only by /api/analyze ----
-
-
 class HourlyInsight(BaseModel):
     hour: int
     tariff_bdt_per_kwh: float
     demand_kwh: float
     effective_solar_kwh: float
     min_reserve_kwh: float
-    max_grid_kwh: Optional[float] = None  # None = unlimited
+    max_grid_kwh: Optional[float] = None
     charge_allowed: bool
     discharge_allowed: bool
     baseline_grid_kwh: float
@@ -198,8 +171,6 @@ class AnalyzeResponse(BaseModel):
     optimization: OptimizeResponse
     analytics: Analytics
 
-
-# ------------------ NLP Fallback & Extraction Utilities ------------------
 
 SUPPORTED_DIRECTIVES = {
     "solar_reduction",
@@ -231,7 +202,6 @@ NUMBER_WORDS = {
 
 
 def _parse_time_token(token: str, default_pm: bool = False) -> Optional[int]:
-    """Parse a single time string or word into an hour 0..23."""
     t = token.strip().lower()
     if t in ("noon", "midday"):
         return 12
@@ -257,12 +227,6 @@ def _parse_time_token(token: str, default_pm: bool = False) -> Optional[int]:
 
 
 def _hours_between(h1: int, h2: int, allow_wrap: bool = False) -> List[int]:
-    """
-    Whole-hour list for the window [h1, h2) (start inclusive, end exclusive).
-
-    * h2 == 0 with h1 > 0 is read as midnight (24), e.g. "10 PM until midnight".
-    * allow_wrap=True lets an overnight window such as 22 -> 2 return [0, 1, 22, 23].
-    """
     if h2 == 0 and h1 > 0:
         h2 = 24
     if 0 <= h1 < h2 <= 24:
@@ -273,31 +237,13 @@ def _hours_between(h1: int, h2: int, allow_wrap: bool = False) -> List[int]:
 
 
 def _is_explicit_overnight(s1: str, s2: str) -> bool:
-    """
-    Only treat "start > end" as an overnight window when the text makes it unambiguous:
-    "10 pm ... 2 am" or 24-hour clock times like "22:00 ... 02:00".
-    Ambiguous text such as "12 to 3" must NOT wrap around.
-    """
     if "pm" in s1 and "am" in s2:
         return True
     return ":" in s1 and ":" in s2 and "am" not in s1 + s2 and "pm" not in s1 + s2
 
 
 def extract_hours_window(text: str) -> List[int]:
-    """
-    Extract start-inclusive, end-exclusive hours from natural language.
-    Examples:
-      'from noon until 2 PM'      -> [12, 13]
-      '1 PM to 3 PM'              -> [13, 14]
-      '1-3 PM'                    -> [13, 14]
-      'between 13:00 and 15:00'   -> [13, 14]
-      'from one until three'      -> [13, 14]
-      'from 10 PM to 2 AM'        -> [0, 1, 22, 23]   (overnight)
-      'from 10 PM until midnight' -> [22, 23]
-    """
     t = text.lower()
-
-    # Pattern A: '1-3 PM' or '1–3 PM'
     m_range = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(am|pm)", t)
     if m_range:
         period = m_range.group(3)
@@ -311,8 +257,6 @@ def extract_hours_window(text: str) -> List[int]:
         hrs = _hours_between(h1, h2)
         if hrs:
             return hrs
-
-    # Pattern B: 'from X until/to Y' or 'between X and Y'
     m = re.search(
         r"(?:from|between)\s+([a-z0-9:]+(?:\s*(?:am|pm))?)\s+(?:until|to|and)\s+([a-z0-9:]+(?:\s*(?:am|pm))?)",
         t,
@@ -333,8 +277,6 @@ def extract_hours_window(text: str) -> List[int]:
             hrs = _hours_between(h1, h2, allow_wrap=_is_explicit_overnight(s1, s2))
             if hrs:
                 return hrs
-
-    # Pattern C: 'X until Y' or 'X to Y'
     m_to = re.search(
         r"(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:until|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)",
         t,
@@ -356,13 +298,6 @@ _PCT = r"(\d+(?:\.\d+)?)\s*(?:%|percent)"
 
 
 def _extract_solar_factor(t: str) -> float:
-    """
-    Return the USABLE solar fraction (0..1) described by a lower-cased note.
-      '80% reduction'          -> 0.20
-      'reduced by 60%'         -> 0.40   (NEW: previously fell back to 0.50)
-      'reduced to 25%'         -> 0.25
-      'roughly one-fourth'     -> 0.25
-    """
     m_red = re.search(_PCT + r"\s*(?:reduction|drop|decline|loss|cut)", t)
     if m_red:
         return round(max(0.0, min(1.0, (100.0 - float(m_red.group(1))) / 100.0)), 4)
@@ -393,14 +328,8 @@ def _extract_solar_factor(t: str) -> float:
 def extract_directive_fallback(
     note: str, battery_capacity: float = 200.0
 ) -> Dict[str, Any]:
-    """
-    Deterministic rule-based NLP extractor that accurately extracts directives
-    across all supported types and paraphrased variations.
-    """
     t = note.lower()
     hours = extract_hours_window(t)
-
-    # 1. Solar reduction
     if any(k in t for k in ["solar", "rooftop", "panel", "pv"]):
         if any(
             k in t
@@ -422,8 +351,6 @@ def extract_directive_fallback(
                 "structured_adjustment": {"hours": hours, "factor": factor},
                 "explanation": f"Solar availability reduced during hours {hours} (usable factor: {factor}).",
             }
-
-    # 2. No discharge window (Check discharge before charge to avoid substring match)
     if ("discharge" in t or "discharging" in t) and any(
         k in t
         for k in [
@@ -445,8 +372,6 @@ def extract_directive_fallback(
             "structured_adjustment": {"hours": hours},
             "explanation": f"Battery discharge is disabled during hours {hours}.",
         }
-
-    # 3. No charge window
     if ("charge" in t or "charging" in t) and any(
         k in t
         for k in [
@@ -466,8 +391,6 @@ def extract_directive_fallback(
             "structured_adjustment": {"hours": hours},
             "explanation": f"Battery charge is disabled during hours {hours}.",
         }
-
-    # 4. Minimum battery reserve
     if any(
         k in t
         for k in [
@@ -496,8 +419,6 @@ def extract_directive_fallback(
             "structured_adjustment": {"hours": hours, "minimum_energy_kwh": val},
             "explanation": f"Battery reserve raised to {val} kWh during hours {hours}.",
         }
-
-    # 5. Max grid window
     if any(
         k in t
         for k in [
@@ -517,8 +438,6 @@ def extract_directive_fallback(
             "structured_adjustment": {"hours": hours, "max_grid_kwh": val},
             "explanation": f"Grid import is capped at {val} kWh during hours {hours}.",
         }
-
-    # 6. Default no_op for irrelevant notes / distractors
     return {
         "applies": False,
         "directive_type": "no_op",
@@ -527,7 +446,14 @@ def extract_directive_fallback(
     }
 
 
-# ------------------ LLM Interpretation & Guardrails ------------------
+def _candidate_models() -> List[str]:
+    primary = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip()
+    fallbacks = os.getenv("GEMINI_FALLBACK_MODELS", DEFAULT_GEMINI_FALLBACKS).split(",")
+    models: List[str] = []
+    for name in [primary] + [m.strip() for m in fallbacks]:
+        if name and name not in models:
+            models.append(name)
+    return models
 
 
 def get_llm_prompt(
@@ -597,19 +523,7 @@ Return ONLY a valid JSON array of objects with keys:
 """
 
 
-def _candidate_models() -> List[str]:
-    """Primary model from GEMINI_MODEL, then GEMINI_FALLBACK_MODELS (comma separated)."""
-    primary = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip()
-    fallbacks = os.getenv("GEMINI_FALLBACK_MODELS", DEFAULT_GEMINI_FALLBACKS).split(",")
-    models: List[str] = []
-    for name in [primary] + [m.strip() for m in fallbacks]:
-        if name and name not in models:
-            models.append(name)
-    return models
-
-
 def _parse_llm_json(text: str) -> List[Dict[str, Any]]:
-    """Turn raw LLM text into a list of dict directives (tolerant of code fences / wrappers)."""
     cleaned = (text or "").strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*```$", "", cleaned).strip()
@@ -636,12 +550,6 @@ def _parse_llm_json(text: str) -> List[Dict[str, Any]]:
 def interpret_notes_with_llm(
     notes: List[str], battery: BatteryData
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """
-    Call Google Gemini to interpret operator notes.
-    Returns (raw_directives, interpreter_label). Always falls back to the deterministic
-    parser on any problem, so the endpoint never fails because of the LLM.
-    """
-
     def fallback(reason: str) -> Tuple[List[Dict[str, Any]], str]:
         return (
             [extract_directive_fallback(n, battery.capacity_kwh) for n in notes],
@@ -659,7 +567,7 @@ def interpret_notes_with_llm(
         import google.generativeai as genai
 
         genai.configure(api_key=api_key)
-    except Exception as e:  # SDK missing / bad configuration
+    except Exception as e:
         logger.warning(f"Gemini SDK unavailable: {e}. Using deterministic parser.")
         return fallback("SDK unavailable")
 
@@ -687,24 +595,12 @@ def interpret_notes_with_llm(
 def guardrail_directives(
     raw: List[Dict], notes: List[str], battery: BatteryData
 ) -> List[DirectiveInterpretation]:
-    """
-    Deterministic validation and sanitization of directive interpretations.
-    Enforces all problem statement rules:
-      - Exactly one entry per note, in note_index order
-      - Valid directive_type
-      - Unique hours in ascending order within [0, 23]
-      - Bounded numerical values
-      - applies=False and structured_adjustment=None strictly for no_op
-      - applies=True strictly for non-no_op directives
-    """
     result = []
     num_notes = len(notes)
     raw = [x for x in (raw or []) if isinstance(x, dict)]
 
     for i in range(num_notes):
         note_text = notes[i]
-
-        # Match by note_index or fallback to index position
         item = next((x for x in raw if x.get("note_index") == i), None)
         if item is None and i < len(raw):
             item = raw[i]
@@ -734,16 +630,12 @@ def guardrail_directives(
                 )
             )
             continue
-
-        # For non-no_op directives, validate hours and parameters
         sa = item.get("structured_adjustment")
         if not isinstance(sa, dict):
             sa = {}
         hours = sa.get("hours", [])
         if not isinstance(hours, list):
             hours = []
-
-        # Clean and sort hours
         clean_hours = sorted(
             set(
                 int(h)
@@ -751,8 +643,6 @@ def guardrail_directives(
                 if isinstance(h, (int, float)) and 0 <= int(h) <= 23
             )
         )
-
-        # If hours empty or invalid, try fallback hours
         if not clean_hours:
             fb_adj = fallback_dir.get("structured_adjustment")
             if fb_adj and fb_adj.get("hours"):
@@ -761,7 +651,6 @@ def guardrail_directives(
                 sa = fb_adj
 
         if not clean_hours:
-            # Cannot form a valid window; must be treated as no_op
             result.append(
                 DirectiveInterpretation(
                     note_index=i,
@@ -815,7 +704,6 @@ def guardrail_directives(
                 valid = False
 
         elif dtype in ("no_charge_window", "no_discharge_window"):
-            # Only hours needed
             pass
 
         if not valid:
@@ -845,15 +733,11 @@ def guardrail_directives(
     return result
 
 
-# ------------------ Constraints + Exact LP Optimizer (HiGHS) ------------------
-
-
 def build_constraints(
     hours: List[HourData],
     battery: BatteryData,
     directives: List[DirectiveInterpretation],
 ) -> Dict[str, Any]:
-    """Turn validated directives into the per-hour limits the LP (and the dashboard) use."""
     n = 24
     effective_solar = [float(h.solar_kwh) for h in hours]
     no_charge_hours: set = set()
@@ -900,23 +784,6 @@ def _solve_lp(
     cons: Dict[str, Any],
     relax_grid: bool = False,
 ) -> np.ndarray:
-    """
-    Solve the 24-hour scheduling LP to global optimality (HiGHS via scipy.optimize.linprog).
-
-    Decision Variables per hour h in 0..23:
-      g_h: Grid energy purchased (kWh)     s_h: Solar energy utilized (kWh)
-      c_h: Battery energy charged (kWh)    d_h: Battery energy discharged (kWh)
-      E_h: Battery energy level after hour h (kWh)
-
-    Constraints:
-      1. Energy Balance:   g_h + s_h + d_h - c_h = demand_h
-      2. SoC Dynamics:     E_h - E_{h-1} - c_h + d_h = 0   (E_{-1} = initial_energy)
-      3. Neutrality:       E_23 = initial_energy
-      4. Solar:            0 <= s_h <= effective_solar_h
-      5. Grid:             0 <= g_h <= max_grid_h
-      6/7. Rate limits:    0 <= c_h <= max_charge, 0 <= d_h <= max_discharge
-      8. Storage bounds:   min_reserve_h <= E_h <= capacity
-    """
     n = 24
     demand = [h.demand_kwh for h in hours]
     tariff = [h.tariff_bdt_per_kwh for h in hours]
@@ -924,44 +791,44 @@ def _solve_lp(
     max_grid = cons["max_grid"]
     min_reserve = cons["min_reserve"]
 
-    num_vars = 120  # g:0..23  s:24..47  c:48..71  d:72..95  E:96..119
+    num_vars = 120
     c_obj = np.zeros(num_vars)
     for h in range(n):
-        c_obj[h] = tariff[h]  # Minimize total grid cost
-        c_obj[24 + h] = -1e-6  # Secondary objective: prefer using available solar
+        c_obj[h] = tariff[h]
+        c_obj[24 + h] = -1e-6
 
     bounds = []
-    for h in range(n):  # g_h
+    for h in range(n):
         cap = max_grid[h]
         ub = None if (relax_grid or cap == float("inf")) else cap
         bounds.append((0.0, ub))
-    for h in range(n):  # s_h
+    for h in range(n):
         bounds.append((0.0, max(0.0, effective_solar[h])))
-    for h in range(n):  # c_h
+    for h in range(n):
         ub = 0.0 if h in cons["no_charge_hours"] else battery.max_charge_kwh_per_hour
         bounds.append((0.0, ub))
-    for h in range(n):  # d_h
+    for h in range(n):
         ub = (
             0.0
             if h in cons["no_discharge_hours"]
             else battery.max_discharge_kwh_per_hour
         )
         bounds.append((0.0, ub))
-    for h in range(n):  # E_h
+    for h in range(n):
         bounds.append((min_reserve[h], battery.capacity_kwh))
 
-    num_eq = 49  # 24 energy balance + 24 SoC transitions + 1 neutrality
+    num_eq = 49
     A_eq = np.zeros((num_eq, num_vars))
     b_eq = np.zeros(num_eq)
 
-    for h in range(n):  # Energy balance
+    for h in range(n):
         A_eq[h, h] = 1.0
         A_eq[h, 24 + h] = 1.0
         A_eq[h, 48 + h] = -1.0
         A_eq[h, 72 + h] = 1.0
         b_eq[h] = demand[h]
 
-    for h in range(n):  # Battery dynamics
+    for h in range(n):
         row = 24 + h
         A_eq[row, 96 + h] = 1.0
         A_eq[row, 48 + h] = -1.0
@@ -972,7 +839,7 @@ def _solve_lp(
             A_eq[row, 96 + h - 1] = -1.0
             b_eq[row] = 0.0
 
-    A_eq[48, 96 + 23] = 1.0  # End-of-day neutrality
+    A_eq[48, 96 + 23] = 1.0
     b_eq[48] = battery.initial_energy_kwh
 
     res = linprog(c_obj, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method="highs")
@@ -988,14 +855,6 @@ def optimize_energy(
     directives: List[DirectiveInterpretation],
     constraints: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[HourlyPlan], List[str]]:
-    """
-    Returns (hourly_plan, warnings).
-
-    If the schedule is infeasible ONLY because of max_grid_window caps (e.g. cap 100 kWh
-    while demand is 190 kWh and the battery/solar cannot cover the gap), the caps are
-    relaxed, the cheapest feasible schedule is returned, and a warning is reported
-    instead of crashing with a 500.
-    """
     n = 24
     cons = constraints or build_constraints(hours, battery, directives)
     demand = [h.demand_kwh for h in hours]
@@ -1008,7 +867,7 @@ def optimize_energy(
         capped = [h for h in range(n) if cons["max_grid"][h] != float("inf")]
         if not capped:
             raise
-        x = _solve_lp(hours, battery, cons, relax_grid=True)  # may still raise
+        x = _solve_lp(hours, battery, cons, relax_grid=True)
         warnings.append(
             "max_grid_window limit could not be satisfied for hours "
             f"{capped}; grid cap was relaxed to keep the schedule feasible."
@@ -1018,8 +877,6 @@ def optimize_energy(
     s_arr = x[24:48]
     c_arr = x[48:72]
     d_arr = x[72:96]
-
-    # Post-process: cancel simultaneous charge/discharge (mutual exclusivity)
     plan: List[HourlyPlan] = []
     current_energy = battery.initial_energy_kwh
     for h in range(n):
@@ -1034,8 +891,6 @@ def optimize_energy(
             action, action_kwh = "idle", 0.0
 
         solar_val = float(max(0.0, min(effective_solar[h], s_arr[h])))
-
-        # Re-derive grid_kwh exactly from the energy balance: g = demand + c - s - d
         c_kwh = action_kwh if action == "charge" else 0.0
         d_kwh = action_kwh if action == "discharge" else 0.0
         grid_val = float(max(0.0, demand[h] + c_kwh - solar_val - d_kwh))
@@ -1055,11 +910,7 @@ def optimize_energy(
     return plan, warnings
 
 
-# ------------------ Pipeline + Analytics ------------------
-
-
 def run_pipeline(req: OptimizeRequest) -> Dict[str, Any]:
-    """LLM interpretation -> guardrails -> constraints -> LP -> aggregates."""
     started = time.perf_counter()
 
     raw_interp, interpreter = interpret_notes_with_llm(req.operator_notes, req.battery)
@@ -1100,7 +951,6 @@ def run_pipeline(req: OptimizeRequest) -> Dict[str, Any]:
 
 
 def compute_analytics(req: OptimizeRequest, result: Dict[str, Any]) -> Analytics:
-    """Savings vs. a 'no battery' baseline plus per-hour constraint details for the charts."""
     resp: OptimizeResponse = result["response"]
     cons = result["constraints"]
     plan = resp.hourly_plan
@@ -1160,7 +1010,6 @@ def compute_analytics(req: OptimizeRequest, result: Dict[str, Any]) -> Analytics
 
 
 def _execute(req: OptimizeRequest) -> Dict[str, Any]:
-    """Run the pipeline and translate failures into safe HTTP errors."""
     try:
         return run_pipeline(req)
     except HTTPException:
@@ -1174,19 +1023,14 @@ def _execute(req: OptimizeRequest) -> Dict[str, Any]:
         )
     except Exception:
         logger.exception("Error processing energy optimization request")
-        # Ensure safe failure without leaking credentials or raw system stack traces
         raise HTTPException(
             status_code=500,
             detail="Controlled internal server error during energy optimization processing.",
         )
 
 
-# ------------------ API Endpoints ------------------
-
-
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
-    """Serve the GridWise LLM interactive dashboard."""
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(index_path):
         with open(index_path, "r", encoding="utf-8") as f:
@@ -1196,7 +1040,6 @@ def dashboard():
 
 @app.get("/api/presets")
 def get_presets():
-    """Return the 10 official BUP sample scenarios for the interactive UI."""
     sample_file = os.path.join(
         os.path.dirname(__file__),
         "Question",
@@ -1216,15 +1059,808 @@ def get_presets():
     return {}
 
 
+@app.get("/docs", include_in_schema=False)
+def swagger_docs():
+    response = get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title="GridWise API · Swagger",
+        swagger_ui_parameters=app.swagger_ui_parameters,
+    )
+    content = response.body.decode("utf-8")
+    theme = """
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg-deep: #04060f;
+  --bg-base: #070b14;
+  --bg-surface: rgba(13, 19, 33, 0.72);
+  --bg-elevated: rgba(20, 28, 46, 0.78);
+  --bg-inset: rgba(6, 11, 22, 0.55);
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --border-mid: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.08);
+  --primary: #10b981;
+  --primary-bright: #34d399;
+  --secondary: #06b6d4;
+  --secondary-bright: #22d3ee;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --text-faint: #475569;
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Fraunces', 'Plus Jakarta Sans', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(6, 182, 212, 0.18), transparent 65%),
+    radial-gradient(ellipse 50% 40% at 90% 10%, rgba(16, 185, 129, 0.12), transparent 60%),
+    radial-gradient(circle 900px at 5% 100%, rgba(196, 181, 253, 0.08), transparent 65%);
+  background-attachment: fixed;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+  background-size: 60px 60px;
+  -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+  mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+  z-index: 0;
+}
+.gw-brand-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: rgba(4, 8, 18, 0.65);
+  border-bottom: 1px solid var(--border-soft);
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gw-brand-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.4), rgba(34, 211, 238, 0.4), transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.gw-brand-wrap { display: flex; align-items: center; gap: 1rem; }
+.gw-brand-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #0ea5e9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 30px rgba(16, 185, 129, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+.gw-brand-icon svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3)); }
+.gw-brand-title {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: #fff;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  line-height: 1.1;
+}
+.gw-brand-title .gw-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.18));
+  color: #5eead4;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(94, 234, 212, 0.25);
+}
+.gw-brand-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.gw-nav { display: flex; align-items: center; gap: 0.65rem; }
+.gw-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.06));
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  color: #6ee7b7;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 999px;
+}
+.gw-status-pill .gw-pulse {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+}
+.gw-status-pill .gw-pulse::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: #34d399;
+  opacity: 0.4;
+  animation: gw-pulse 2.2s ease-in-out infinite;
+}
+@keyframes gw-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.4); opacity: 0; }
+}
+.gw-nav a {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.gw-nav a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-color: rgba(34, 211, 238, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.15);
+}
+.gw-nav a svg { width: 14px; height: 14px; }
+.swagger-ui {
+  position: relative;
+  z-index: 1;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 32px clamp(20px, 4vw, 56px) 80px;
+}
+.swagger-ui .topbar { display: none; }
+.swagger-ui .info { margin: 0 0 32px; }
+.swagger-ui .info .title {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 36px;
+  letter-spacing: -0.035em;
+}
+.swagger-ui .info p, .swagger-ui .info li, .swagger-ui .opblock-description-wrapper p { color: var(--text-muted); }
+.swagger-ui .scheme-container, .swagger-ui .opblock-tag-section {
+  background: transparent;
+  box-shadow: none;
+}
+.swagger-ui .opblock-tag {
+  color: var(--text);
+  border-bottom-color: var(--border-soft);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.swagger-ui .opblock {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .35);
+}
+.swagger-ui .opblock.is-open { box-shadow: 0 20px 50px rgba(0, 0, 0, .45); }
+.swagger-ui .opblock-summary {
+  border-bottom-color: var(--border-soft);
+  padding: 14px 20px;
+  background: transparent;
+}
+.swagger-ui .opblock-summary:hover { background: rgba(255, 255, 255, 0.02); }
+.swagger-ui .opblock-summary-method {
+  min-width: 88px;
+  border-radius: 9px;
+  font: 800 11px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.swagger-ui .opblock-summary:hover .opblock-summary-method {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.swagger-ui .opblock-summary-method-get {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  color: #f0f9ff;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}
+.swagger-ui .opblock-summary-method-post {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ecfdf5;
+  border: 1px solid rgba(52, 211, 153, 0.5);
+}
+.swagger-ui .opblock-summary-method-put {
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  color: #fffbeb;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+}
+.swagger-ui .opblock-summary-method-delete {
+  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+  color: #fef2f2;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+}
+.swagger-ui .opblock-summary-method-head,
+.swagger-ui .opblock-summary-method-options {
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  color: #f5f3ff;
+  border: 1px solid rgba(167, 139, 250, 0.5);
+}
+.swagger-ui .opblock-summary-method-patch {
+  background: linear-gradient(135deg, #c084fc 0%, #9333ea 100%);
+  color: #faf5ff;
+  border: 1px solid rgba(192, 132, 252, 0.5);
+}
+.swagger-ui .opblock-summary-path,
+.swagger-ui .opblock-summary-description,
+.swagger-ui .parameter__name,
+.swagger-ui .parameter__type,
+.swagger-ui label,
+.swagger-ui table thead tr th,
+.swagger-ui .response-col_status,
+.swagger-ui .responses-table .response { color: var(--text); }
+.swagger-ui .opblock-summary-path {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 14px;
+}
+.swagger-ui .opblock-description-wrapper,
+.swagger-ui .opblock-section-header,
+.swagger-ui .responses-inner,
+.swagger-ui .model-box {
+  background: rgba(4, 8, 16, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.swagger-ui .opblock-section-header {
+  border-color: var(--border-soft);
+  padding: 14px 20px;
+}
+.swagger-ui .opblock-section-header .opblock-title { font-weight: 600; }
+.swagger-ui .btn,
+.swagger-ui select,
+.swagger-ui input,
+.swagger-ui textarea {
+  border-radius: 10px;
+  border-color: var(--border-soft);
+  background: rgba(4, 8, 16, 0.72);
+  color: var(--text);
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.swagger-ui input,
+.swagger-ui textarea,
+.swagger-ui select {
+  outline: none;
+}
+.swagger-ui input:focus,
+.swagger-ui textarea:focus,
+.swagger-ui select:focus {
+  border-color: var(--secondary-bright);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+}
+.swagger-ui .btn:hover,
+.swagger-ui select:hover,
+.swagger-ui input:hover,
+.swagger-ui textarea:hover {
+  border-color: rgba(34, 211, 238, 0.4);
+}
+.swagger-ui .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 16px;
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.swagger-ui .btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  border-color: rgba(34, 211, 238, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 10px rgba(6, 182, 212, 0.15);
+}
+.swagger-ui .btn:active { transform: translateY(1px); }
+.swagger-ui .try-out__btn {
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 6px 14px;
+  border-radius: 9px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  color: #5eead4;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 0 rgba(34, 211, 238, 0.3);
+}
+.swagger-ui .try-out__btn:hover {
+  background: rgba(34, 211, 238, 0.15);
+  border-color: rgba(34, 211, 238, 0.55);
+  color: #ecfeff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(34, 211, 238, 0.3);
+  transform: translateY(-1px);
+}
+.swagger-ui .try-out__btn.cancel {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
+.swagger-ui .try-out__btn.cancel:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fee2e2;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(248, 113, 113, 0.3);
+}
+.swagger-ui .btn.cancel,
+.swagger-ui button.btn-clear,
+.swagger-ui button.btn-clear-filter {
+  border-color: var(--border-soft);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+}
+.swagger-ui .btn.cancel:hover,
+.swagger-ui button.btn-clear:hover,
+.swagger-ui button.btn-clear-filter:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+.swagger-ui .btn.execute {
+  border: 0;
+  background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  color: #021014;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 9px 22px;
+  font-size: 13px;
+  border-radius: 10px;
+  box-shadow:
+    0 6px 20px rgba(16, 185, 129, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+.swagger-ui .btn.execute::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+.swagger-ui .btn.execute:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 10px 30px rgba(16, 185, 129, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+.swagger-ui .btn.execute:hover::before { left: 100%; }
+.swagger-ui .btn.execute:active { transform: translateY(0); }
+.swagger-ui .execute-wrapper { padding-top: 10px; }
+.swagger-ui .responses-inner h4,
+.swagger-ui .responses-inner h5 { color: var(--text); }
+.swagger-ui .response .response-col_status code {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.swagger-ui .response .response-col_status .response-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.swagger-ui .response .response-col_status .response-other {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+  border: 1px solid var(--border-soft);
+}
+.swagger-ui .highlight-code,
+.swagger-ui .microlight {
+  background: #040810 !important;
+  color: #7dd3fc !important;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+}
+.swagger-ui .model,
+.swagger-ui .model-title,
+.swagger-ui .prop-type,
+.swagger-ui .prop-format,
+.swagger-ui .renderedMarkdown p { color: var(--text-muted); }
+.swagger-ui table thead tr td,
+.swagger-ui table thead tr th { border-bottom-color: var(--border-soft); }
+.swagger-ui table tbody tr td { padding: 10px 12px; border-bottom-color: rgba(255, 255, 255, 0.03); }
+.swagger-ui .response-col_description { color: var(--text-muted); }
+.swagger-ui .markdown p, .swagger-ui .markdown li, .swagger-ui .renderedMarkdown p { color: var(--text-muted); }
+.swagger-ui .scheme-container .schemes > label { color: var(--text-muted); }
+.swagger-ui .filter input { color: var(--text); }
+.swagger-ui .filter input::placeholder { color: var(--text-faint); }
+.swagger-ui .opblock-tag-section h3,
+.swagger-ui .opblock-tag small { color: var(--text-muted); }
+.swagger-ui .parameter__type { font-family: var(--font-mono); font-size: 0.78rem; }
+.swagger-ui .parameter__name { font-family: var(--font-mono); font-weight: 600; }
+.swagger-ui .response-col_status { font-family: var(--font-mono); font-weight: 700; }
+.swagger-ui .response.unauthorized .response-col_status { color: #fbbf24; }
+.swagger-ui .response.internal .response-col_status,
+.swagger-ui .response.default .response-col_status { color: #f87171; }
+.swagger-ui .expand-collapse-operation,
+.swagger-ui .expand-collapse-methods,
+.swagger-ui .expand-collapse { color: var(--text-muted); }
+.swagger-ui a { color: #22d3ee; }
+.swagger-ui a:hover { color: #5eead4; }
+.swagger-ui .dialog-ux .modal-ux { background: var(--bg-elevated); border-color: var(--border-soft); }
+.swagger-ui .dialog-ux .modal-ux-header { background: transparent; border-bottom-color: var(--border-soft); color: var(--text); }
+.swagger-ui .dialog-ux .modal-ux-content { color: var(--text-muted); background: transparent; }
+.swagger-ui .info__extdocs { color: var(--text-muted); }
+.gw-footer {
+  text-align: center;
+  padding: 2rem 1rem 1rem;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+.gw-footer span {
+  background: linear-gradient(135deg, #34d399, #22d3ee);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .gw-brand-header { padding: 0.85rem 1rem; }
+  .gw-brand-title { font-size: 1.15rem; }
+  .gw-brand-sub { font-size: 0.66rem; }
+  .gw-nav a span { display: none; }
+}
+</style>
+<header class="gw-brand-header">
+  <div class="gw-brand-wrap">
+    <div class="gw-brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+    </div>
+    <div>
+      <div class="gw-brand-title">GridWise<span class="gw-badge">LLM</span></div>
+      <div class="gw-brand-sub">Campus Energy Optimization · API Reference</div>
+    </div>
+  </div>
+  <div class="gw-nav">
+    <div class="gw-status-pill"><span class="gw-pulse"></span><span>OpenAPI 3 · Live</span></div>
+    <a href="/" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"></path><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"></path></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="/health?ui=1" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <span>Health</span>
+    </a>
+  </div>
+</header>
+<div class="gw-footer">Crafted for <span>BUP CSE Fest 2026</span> · GridWise LLM Optimization Engine</div>
+"""
+    return HTMLResponse(content=content.replace("</head>", f"{theme}</head>"))
+
+
 @app.get("/health")
-def health():
-    """Readiness endpoint required by BUP Hackathon specification."""
+def health(ui: bool = False):
+    if ui:
+        return HTMLResponse(
+            content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GridWise · Health Probe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #04060f;
+      --bg-base: #070b14;
+      --surface: rgba(13,19,33,.72);
+      --border: rgba(255,255,255,.08);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --dim: #64748b;
+      --green: #10b981;
+      --cyan: #06b6d4;
+      --violet: #c4b5fd;
+      --font-main: 'Plus Jakarta Sans', sans-serif;
+      --font-display: 'Fraunces', serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100vh; }
+    body {
+      display: grid;
+      place-items: center;
+      padding: clamp(20px, 4vw, 48px);
+      color: var(--text);
+      font-family: var(--font-main);
+      background: var(--bg-deep);
+      background-image:
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(6,182,212,.18), transparent 65%),
+        radial-gradient(ellipse 50% 40% at 90% 10%, rgba(16,185,129,.12), transparent 60%),
+        radial-gradient(circle 700px at 5% 100%, rgba(196,181,253,.08), transparent 65%);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+    }
+    .shell { width: min(820px, 100%); position: relative; z-index: 1; }
+    .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
+    .mark {
+      width: 48px; height: 48px;
+      display: grid; place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #10b981 0%, #06b6d4 60%, #0ea5e9 100%);
+      box-shadow: 0 0 30px rgba(16,185,129,.4), inset 0 1px 0 rgba(255,255,255,.3);
+      color: #fff;
+      font-size: 22px;
+    }
+    .mark svg { width: 24px; height: 24px; }
+    h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: clamp(1.85rem, 4vw, 2.6rem);
+      letter-spacing: -0.03em;
+      color: #fff;
+      line-height: 1.1;
+    }
+    .eyebrow {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      letter-spacing: 0.02em;
+    }
+    .card {
+      padding: clamp(28px, 5vw, 48px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--surface);
+      box-shadow: 0 24px 60px -12px rgba(0,0,0,.6);
+      backdrop-filter: blur(28px) saturate(150%);
+      -webkit-backdrop-filter: blur(28px) saturate(150%);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      border: 1px solid rgba(16,185,129,.28);
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(16,185,129,.04));
+      color: #6ee7b7;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .dot {
+      position: relative;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      background: #34d399;
+      flex-shrink: 0;
+    }
+    .dot::before {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      background: #34d399;
+      opacity: 0.4;
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { transform: scale(.8); opacity: .5; } 50% { transform: scale(1.4); opacity: 0; } }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-top: 22px;
+    }
+    .metric {
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(6,11,22,.55);
+      position: relative;
+      overflow: hidden;
+    }
+    .metric::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(180deg, var(--cyan), var(--violet));
+      opacity: 0.5;
+    }
+    .label {
+      color: var(--dim);
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .value {
+      margin-top: 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 1.02rem;
+      overflow-wrap: anywhere;
+    }
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    a {
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+      background: rgba(255,255,255,.04);
+      transition: all 0.25s ease;
+      letter-spacing: 0.01em;
+    }
+    a:hover {
+      border-color: rgba(34,211,238,.4);
+      color: #fff;
+      background: rgba(34,211,238,.1);
+      transform: translateY(-1px);
+    }
+    @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      </div>
+      <div>
+        <h1>GridWise Health Probe</h1>
+        <p class="eyebrow">Live service readiness and runtime status</p>
+      </div>
+    </div>
+    <section class="card">
+      <div class="status"><span class="dot"></span><span id="health-status">Checking service health…</span></div>
+      <div class="grid">
+        <div class="metric"><div class="label">API Status</div><div class="value" id="api-status">—</div></div>
+        <div class="metric"><div class="label">Version</div><div class="value" id="version">—</div></div>
+        <div class="metric"><div class="label">Solver</div><div class="value" id="solver">—</div></div>
+        <div class="metric"><div class="label">LLM Configured</div><div class="value" id="llm">—</div></div>
+      </div>
+      <nav class="links">
+        <a href="/">← Live Dashboard</a>
+        <a href="/docs">Swagger Docs</a>
+        <a href="/health">JSON Response</a>
+      </nav>
+    </section>
+  </main>
+  <script>
+    Promise.all([fetch('/health'), fetch('/api/status')]).then(async ([healthResponse, statusResponse]) => {
+      const health = await healthResponse.json();
+      const status = await statusResponse.json();
+      document.getElementById('health-status').textContent = health.status === 'ok' ? 'Service is healthy and ready' : 'Service reported an issue';
+      document.getElementById('api-status').textContent = health.status.toUpperCase();
+      document.getElementById('version').textContent = status.version;
+      document.getElementById('solver').textContent = status.solver;
+      document.getElementById('llm').textContent = status.llm_configured ? 'Configured' : 'Offline fallback';
+    }).catch(() => { document.getElementById('health-status').textContent = 'Unable to reach service'; });
+  </script>
+</body>
+</html>""",
+        )
     return {"status": "ok"}
 
 
 @app.get("/api/status")
 def status():
-    """Non-secret runtime info for the dashboard header badges."""
     return {
         "status": "ok",
         "version": APP_VERSION,
@@ -1236,19 +1872,11 @@ def status():
 
 @app.post("/optimize-energy", response_model=OptimizeResponse)
 def optimize(req: OptimizeRequest):
-    """
-    Main energy optimization endpoint (contract unchanged):
-      1. Interprets operator notes via LLM (Gemini) with deterministic NLP fallback.
-      2. Validates directives through deterministic guardrails.
-      3. Solves the 24-hour scheduling problem to global optimality via HiGHS.
-      4. Computes aggregates and returns a validated structured response.
-    """
     return _execute(req)["response"]
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 def analyze(req: OptimizeRequest):
-    """Same as /optimize-energy, plus savings vs. baseline, warnings and per-hour constraints."""
     result = _execute(req)
     return AnalyzeResponse(
         optimization=result["response"], analytics=compute_analytics(req, result)
@@ -1257,7 +1885,6 @@ def analyze(req: OptimizeRequest):
 
 @app.post("/api/export-csv")
 def export_csv(req: OptimizeRequest):
-    """Download the optimized hourly schedule as a CSV file."""
     result = _execute(req)
     plan = result["response"].hourly_plan
 
