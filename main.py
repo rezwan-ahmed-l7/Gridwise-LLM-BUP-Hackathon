@@ -1294,56 +1294,77 @@ body::after {
 }
 .swagger-ui .opblock-summary:hover { background: rgba(255, 255, 255, 0.02); }
 .swagger-ui .opblock-summary-method {
-  min-width: 88px;
-  border-radius: 9px;
+  min-width: 92px;
+  border-radius: 999px !important;
   font: 800 11px var(--font-mono);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 7px 14px;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+  padding: 7px 16px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+.swagger-ui .opblock-summary-method::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary:hover .opblock-summary-method {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-    0 4px 12px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 8px 22px rgba(0, 0, 0, 0.4);
 }
+.swagger-ui .opblock-summary:hover .opblock-summary-method::before { left: 100%; }
 .swagger-ui .opblock-summary-method-get {
-  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-  color: #f0f9ff;
-  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 50%, #0284c7 100%) !important;
+  color: #f0f9ff !important;
+  border: 1px solid rgba(103, 232, 249, 0.5) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-method-post {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: #ecfdf5;
-  border: 1px solid rgba(52, 211, 153, 0.5);
+  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%) !important;
+  color: #ecfdf5 !important;
+  border: 1px solid rgba(110, 231, 183, 0.55) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-method-put {
-  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
-  color: #fffbeb;
-  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 50%, #d97706 100%) !important;
+  color: #fffbeb !important;
+  border: 1px solid rgba(252, 211, 77, 0.55) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-method-delete {
-  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
-  color: #fef2f2;
-  border: 1px solid rgba(248, 113, 113, 0.5);
+  background: linear-gradient(135deg, #fca5a5 0%, #f87171 50%, #dc2626 100%) !important;
+  color: #fef2f2 !important;
+  border: 1px solid rgba(252, 165, 165, 0.55) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-method-head,
 .swagger-ui .opblock-summary-method-options {
-  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
-  color: #f5f3ff;
-  border: 1px solid rgba(167, 139, 250, 0.5);
+  background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 50%, #7c3aed 100%) !important;
+  color: #f5f3ff !important;
+  border: 1px solid rgba(196, 181, 253, 0.55) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-method-patch {
-  background: linear-gradient(135deg, #c084fc 0%, #9333ea 100%);
-  color: #faf5ff;
-  border: 1px solid rgba(192, 132, 252, 0.5);
+  background: linear-gradient(135deg, #d8b4fe 0%, #c084fc 50%, #9333ea 100%) !important;
+  color: #faf5ff !important;
+  border: 1px solid rgba(216, 180, 254, 0.55) !important;
+  border-radius: 999px !important;
 }
 .swagger-ui .opblock-summary-path,
 .swagger-ui .opblock-summary-description,
@@ -1379,7 +1400,7 @@ body::after {
   border-color: var(--border-soft);
   background: rgba(4, 8, 16, 0.72);
   color: var(--text);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   font-family: inherit;
 }
 .swagger-ui input,
@@ -1404,63 +1425,100 @@ body::after {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 16px;
+  padding: 8px 18px;
   font-family: var(--font-main);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.015em;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-soft);
   color: var(--text-muted);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 999px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.swagger-ui .btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
 }
 .swagger-ui .btn:hover {
   background: rgba(255, 255, 255, 0.07);
   color: var(--text);
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: rgba(34, 211, 238, 0.55);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 2px 10px rgba(6, 182, 212, 0.15);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 18px rgba(6, 182, 212, 0.22);
+  transform: translateY(-1px);
 }
-.swagger-ui .btn:active { transform: translateY(1px); }
+.swagger-ui .btn:hover::before { left: 100%; }
+.swagger-ui .btn:active { transform: translateY(0); }
 .swagger-ui .try-out__btn {
   font-family: var(--font-main);
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 6px 14px;
-  border-radius: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 8px 18px;
+  border-radius: 999px !important;
   background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(34, 211, 238, 0.32);
   color: #5eead4;
   text-transform: uppercase;
-  transition: all 0.2s ease;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 0 0 rgba(34, 211, 238, 0.3);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.swagger-ui .try-out__btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.35), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
 }
 .swagger-ui .try-out__btn:hover {
   background: rgba(34, 211, 238, 0.15);
-  border-color: rgba(34, 211, 238, 0.55);
+  border-color: rgba(94, 234, 212, 0.6);
   color: #ecfeff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(34, 211, 238, 0.3);
-  transform: translateY(-1px);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 22px rgba(34, 211, 238, 0.35);
+  transform: translateY(-2px);
 }
+.swagger-ui .try-out__btn:hover::before { left: 100%; }
+.swagger-ui .try-out__btn:active { transform: translateY(0); }
 .swagger-ui .try-out__btn.cancel {
   background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.3);
+  border-color: rgba(248, 113, 113, 0.32);
   color: #fca5a5;
+}
+.swagger-ui .try-out__btn.cancel::before {
+  background: linear-gradient(90deg, transparent, rgba(252, 165, 165, 0.35), transparent);
 }
 .swagger-ui .try-out__btn.cancel:hover {
   background: rgba(248, 113, 113, 0.15);
-  border-color: rgba(248, 113, 113, 0.55);
+  border-color: rgba(252, 165, 165, 0.6);
   color: #fee2e2;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(248, 113, 113, 0.3);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 22px rgba(248, 113, 113, 0.35);
 }
 .swagger-ui .btn.cancel,
 .swagger-ui button.btn-clear,
@@ -1478,19 +1536,20 @@ body::after {
 }
 .swagger-ui .btn.execute {
   border: 0;
-  background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #10b981 0%, #06b6d4 60%, #0ea5e9 100%);
   color: #021014;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 9px 22px;
+  letter-spacing: 0.025em;
+  padding: 10px 26px;
   font-size: 13px;
-  border-radius: 10px;
+  border-radius: 999px !important;
   box-shadow:
-    0 6px 20px rgba(16, 185, 129, 0.35),
+    0 6px 28px rgba(16, 185, 129, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18);
   position: relative;
   overflow: hidden;
+  text-transform: uppercase;
 }
 .swagger-ui .btn.execute::before {
   content: '';
@@ -1499,17 +1558,17 @@ body::after {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-  transition: left 0.6s ease;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transition: left 0.7s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
 .swagger-ui .btn.execute:hover {
   filter: brightness(1.08);
   box-shadow:
-    0 10px 30px rgba(16, 185, 129, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
-  transform: translateY(-1px);
+    0 12px 40px rgba(16, 185, 129, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
 }
 .swagger-ui .btn.execute:hover::before { left: 100%; }
 .swagger-ui .btn.execute:active { transform: translateY(0); }
