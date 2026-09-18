@@ -4,7 +4,7 @@ Smart Campus Energy Optimization with LLM-assisted Operator Directive Interpreta
 """
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_serializer
 from typing import List, Optional, Dict, Any, Literal
 import os
@@ -23,8 +23,12 @@ logger = logging.getLogger("gridwise")
 
 app = FastAPI(
     title="GridWise LLM",
-    description="BUP CSE Fest 2026 - Smart Campus Energy Optimization",
+    description="BUP CSE Fest 2026 - Smart Campus Energy Optimization Engine",
     version="1.0.0",
+    swagger_ui_parameters={
+        "syntaxHighlight.theme": "obsidian",
+        "defaultModelsExpandDepth": -1,
+    },
 )
 
 # ------------------ Models ------------------
@@ -851,6 +855,38 @@ def optimize_energy(
 
 
 # ------------------ API Endpoints ------------------
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    """Serve the GridWise LLM interactive dashboard."""
+    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>GridWise LLM Service Online</h1>")
+
+
+@app.get("/api/presets")
+def get_presets():
+    """Return the 10 official BUP sample scenarios for the interactive UI."""
+    sample_file = os.path.join(
+        os.path.dirname(__file__),
+        "Question",
+        "BUP_CSE_FEST_2026_Preli_Public_Sample_Cases.json",
+    )
+    if os.path.exists(sample_file):
+        with open(sample_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {
+                c["id"]: {"label": c["label"], "input": c["input"]}
+                for c in data.get("cases", [])
+            }
+    fallback_file = os.path.join(os.path.dirname(__file__), "static_presets.json")
+    if os.path.exists(fallback_file):
+        with open(fallback_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 
 @app.get("/health")

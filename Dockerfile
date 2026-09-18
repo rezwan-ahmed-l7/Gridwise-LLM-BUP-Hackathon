@@ -10,6 +10,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
+COPY static/ static/
+COPY static_presets.json .
+COPY Question/ Question/
 
 ENV PORT=8000
 EXPOSE 8000
