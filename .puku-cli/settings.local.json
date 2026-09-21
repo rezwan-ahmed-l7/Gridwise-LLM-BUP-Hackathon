@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -X POST http://127.0.0.1:8765/optimize-energy -H \"Content-Type: application/json\" --data-binary @sample_request.json)"
     ]
   }
 }
