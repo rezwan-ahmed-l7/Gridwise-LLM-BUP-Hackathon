@@ -11,13 +11,13 @@ GridWise interprets natural-language operator directives, validates them through
 ## Screenshots
 
 ### Live Dashboard
-![Dashboard]<img width="1920" height="1391" alt="screencapture-gridwise-llm-bup-onrender-2026-09-22-02_06_03" src="https://github.com/user-attachments/assets/d51c0355-190e-4ea2-b190-0f8f6244c13c" />
+<img width="1920" height="1391" alt="screencapture-gridwise-llm-bup-onrender-2026-09-22-02_06_03" src="https://github.com/user-attachments/assets/d51c0355-190e-4ea2-b190-0f8f6244c13c" />
 
 ### Health Probe
-![Health]<img width="1920" height="1922" alt="screencapture-gridwise-llm-bup-onrender-health-2026-09-22-02_06_34" src="https://github.com/user-attachments/assets/4397e520-b4ec-4acf-8c78-665fe90837a5" />
+<img width="1920" height="1922" alt="screencapture-gridwise-llm-bup-onrender-health-2026-09-22-02_06_34" src="https://github.com/user-attachments/assets/4397e520-b4ec-4acf-8c78-665fe90837a5" />
 
 ### Swagger API Reference
-![Swagger]<img width="1920" height="1156" alt="screencapture-gridwise-llm-bup-onrender-docs-2026-09-22-02_06_19" src="https://github.com/user-attachments/assets/d4b89097-92ee-4658-8f08-7b6d3f928b2d" />
+<img width="1920" height="1156" alt="screencapture-gridwise-llm-bup-onrender-docs-2026-09-22-02_06_19" src="https://github.com/user-attachments/assets/d4b89097-92ee-4658-8f08-7b6d3f928b2d" />
 
 ---
 
