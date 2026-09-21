@@ -20,15 +20,14 @@ import logging
 import re
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse, Response, FileResponse
-from fastapi import Request
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.core.config import (
     FALLBACK_PRESETS_FILE,
-    QUESTION_DIR,
     SAMPLE_CASES_FILE,
+    STATIC_DIR,
     settings,
 )
 from app.models.schemas import (
@@ -88,13 +87,83 @@ def _load_presets() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Reusable HTML fragments  (so /docs and /health share the same brand bar)
+# ---------------------------------------------------------------------------
+_FONT_LINK = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?'
+    "family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&"
+    "family=JetBrains+Mono:wght@300;400;500;600;700&"
+    "family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700"
+    '" rel="stylesheet">'
+)
+
+
+def _topbar(active: str = "") -> str:
+    """Render the unified brand header used by /docs and /health.
+
+    `active` highlights the current page (one of: '', 'dashboard', 'docs',
+    'health') with the gradient pill treatment.
+    """
+    def _cls(target: str) -> str:
+        return " class=\"active\"" if active == target else ""
+
+    dashboard_link = (
+        f'<a href="/" {_cls("dashboard")}>'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+        '<path d="M3 12l9-9 9 9"/>'
+        '<path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/>'
+        '</svg> Dashboard</a>'
+    )
+    docs_link = (
+        f'<a href="/docs" {_cls("docs")}>'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+        '<path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/>'
+        '</svg> Swagger</a>'
+    )
+    health_link = (
+        f'<a href="/health?ui=1" {_cls("health")}>'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+        '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Health</a>'
+    )
+
+    return (
+        '<header class="gw-topbar">'
+        '<div class="gw-brand">'
+        '<div class="gw-brand-mark" aria-hidden="true">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
+        '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'
+        '</svg></div>'
+        '<div class="gw-brand-text">'
+        '<h1>GridWise<span class="gw-badge">LLM</span></h1>'
+        '<p id="gw-subtitle">Campus Energy Optimization</p>'
+        '</div>'
+        '</div>'
+        '<nav class="gw-nav">'
+        '<div class="gw-pill"><span class="gw-pulse"></span>'
+        '<span id="gw-pill-text">Live</span></div>'
+        f'{dashboard_link}{docs_link}{health_link}'
+        '</nav>'
+        '</header>'
+    )
+
+
+def _footer() -> str:
+    return (
+        '<div class="gw-footer">Crafted for '
+        '<span>BUP CSE Fest 2026</span> · GridWise LLM Optimization Engine</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
 # Page routes
 # ---------------------------------------------------------------------------
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def dashboard() -> Response:
     """Serve the live dashboard from the static directory."""
-    from app.core.config import STATIC_DIR  # local import to avoid cycles
-
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
@@ -103,18 +172,50 @@ def dashboard() -> Response:
 
 @router.get("/docs", include_in_schema=False)
 def swagger_docs(request: Request) -> HTMLResponse:
-    """Custom-themed Swagger UI."""
-    from fastapi import FastAPI  # local for typing
-    app: FastAPI = request.app  # type: ignore[assignment]
-
+    """Custom-themed Swagger UI matching the dashboard design."""
+    app = request.app
     response = get_swagger_ui_html(
         openapi_url=app.openapi_url,
         title="GridWise API · Swagger",
         swagger_ui_parameters=app.swagger_ui_parameters,
     )
     content = response.body.decode("utf-8")
-    theme = _SWAGGER_THEME
-    return HTMLResponse(content=content.replace("</head>", f"{theme}</head>"))
+
+    # Inject: Google Fonts + shared page.css + dedicated api.css.
+    # The shared page.css supplies the brand bar/footer; api.css themes the
+    # Swagger UI body.
+    head_inject = (
+        _FONT_LINK
+        + '<link rel="stylesheet" href="/static/page.css">'
+        + '<link rel="stylesheet" href="/static/api.css">'
+    )
+    content = content.replace("</head>", f"{head_inject}</head>")
+
+    # Inject header + footer at the top/bottom of <body> ... </body>.
+    inject_top = _topbar("docs")
+    inject_bottom = _footer()
+    body_open = content.find("<body>")
+    if body_open != -1:
+        body_open_end = body_open + len("<body>")
+        content = (
+            content[:body_open_end]
+            + inject_top
+            + content[body_open_end:]
+        )
+    body_close = content.rfind("</body>")
+    if body_close != -1:
+        content = content[:body_close] + inject_bottom + content[body_close:]
+
+    # Update brand bar subtitle + pill for this page.
+    content = content.replace(
+        "<p id=\"gw-subtitle\">Campus Energy Optimization</p>",
+        '<p id="gw-subtitle">Campus Energy Optimization · API Reference</p>',
+    )
+    content = content.replace(
+        '<span id="gw-pill-text">Live</span>',
+        '<span id="gw-pill-text">OpenAPI 3 · Live</span>',
+    )
+    return HTMLResponse(content=content)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +225,7 @@ def swagger_docs(request: Request) -> HTMLResponse:
 def health(ui: bool = False) -> Response:
     """JSON readiness probe (or rendered HTML if ?ui=1)."""
     if ui:
-        return HTMLResponse(content=_HEALTH_HTML)
+        return HTMLResponse(content=_render_health_html())
     return {"status": "ok"}
 
 
@@ -211,133 +312,113 @@ def export_csv(req: OptimizeRequest) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Inline CSS for theme / health pages
+# Health page renderer
 # ---------------------------------------------------------------------------
-# Kept here rather than as static assets because these endpoints must work
-# even when the user's static directory is empty.
-_SWAGGER_THEME = """
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
-<style>
-:root {
-  color-scheme: dark;
-  --bg-deep: #04060f; --bg-base: #070b14;
-  --bg-surface: rgba(13, 19, 33, 0.72);
-  --bg-elevated: rgba(20, 28, 46, 0.78);
-  --bg-inset: rgba(6, 11, 22, 0.55);
-  --border-soft: rgba(255, 255, 255, 0.06);
-  --border-mid: rgba(255, 255, 255, 0.1);
-  --primary: #10b981; --primary-bright: #34d399;
-  --secondary: #06b6d4; --secondary-bright: #22d3ee;
-  --text: #f8fafc; --text-muted: #94a3b8; --text-dim: #64748b; --text-faint: #475569;
-  --font-main: 'Plus Jakarta Sans', sans-serif;
-  --font-display: 'Fraunces', serif;
-  --font-mono: 'JetBrains Mono', monospace;
-}
-* { box-sizing: border-box; }
-html, body { margin:0; min-width:320px; background:var(--bg-deep); color:var(--text); font-family:var(--font-main); -webkit-font-smoothing:antialiased; background-attachment: fixed;
-  background-image:
-    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(6, 182, 212, 0.18), transparent 65%),
-    radial-gradient(ellipse 50% 40% at 90% 10%, rgba(16, 185, 129, 0.12), transparent 60%),
-    radial-gradient(circle 900px at 5% 100%, rgba(196, 181, 253, 0.08), transparent 65%); }
-body::after { content:''; position:fixed; inset:0; pointer-events:none; background-image: linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px); background-size: 60px 60px; mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%); z-index:0; }
-.gw-brand-header { position:sticky; top:0; z-index:50; backdrop-filter: blur(28px) saturate(180%); background: rgba(4, 8, 18, 0.65); border-bottom: 1px solid var(--border-soft); padding: 1rem 2rem; display:flex; align-items:center; justify-content:space-between; }
-.gw-brand-wrap { display:flex; align-items:center; gap:1rem; }
-.gw-brand-icon { width:46px; height:46px; border-radius:13px; background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #0ea5e9 100%); display:grid; place-items:center; box-shadow: 0 0 30px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3); color:#fff; }
-.gw-brand-title { font-family:var(--font-display); font-size:1.45rem; font-weight:500; letter-spacing:-0.025em; }
-.gw-status-pill { display:flex; align-items:center; gap:.55rem; background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(16,185,129,.06)); border:1px solid rgba(52,211,153,.28); color:#6ee7b7; font-size:.74rem; font-weight:600; padding:6px 13px; border-radius:999px; }
-.gw-status-pill .gw-pulse { position:relative; width:8px; height:8px; border-radius:50%; background:#34d399; }
-.gw-status-pill .gw-pulse::before { content:''; position:absolute; inset:-4px; border-radius:50%; background:#34d399; opacity:.4; animation: gw-pulse 2.2s ease-in-out infinite; }
-@keyframes gw-pulse { 0%,100%{transform:scale(.8);opacity:.5} 50%{transform:scale(1.4);opacity:0} }
-.gw-nav { display:flex; gap:.65rem; }
-.gw-nav a { background: rgba(255,255,255,.04); border:1px solid var(--border-soft); color:var(--text-muted); font-size:.78rem; font-weight:600; padding:7px 14px; border-radius:10px; text-decoration:none; display:inline-flex; align-items:center; gap:.45rem; }
-.gw-nav a:hover { background: rgba(255,255,255,.08); color:var(--text); border-color: rgba(34,211,238,.4); }
-.swagger-ui { position:relative; z-index:1; max-width:1380px; margin:0 auto; padding: 32px clamp(20px,4vw,56px) 80px; }
-.swagger-ui .topbar { display:none; }
-.swagger-ui .info { margin: 0 0 32px; }
-.swagger-ui .info .title { color:var(--text); font-family:var(--font-display); font-weight:500; font-size:36px; letter-spacing:-0.035em; }
-.swagger-ui .info p, .swagger-ui .info li { color:var(--text-muted); }
-.swagger-ui .opblock { overflow:hidden; border:1px solid var(--border-soft); border-radius:16px; background:var(--bg-surface); backdrop-filter: blur(24px) saturate(150%); box-shadow: 0 16px 40px rgba(0,0,0,.35); margin-bottom:14px; }
-.swagger-ui .opblock-tag { color:var(--text); border-bottom-color:var(--border-soft); font-family:var(--font-display); font-weight:500; font-size:22px; }
-.swagger-ui .opblock-summary { border-bottom-color:var(--border-soft); padding:14px 20px; background:transparent; }
-.swagger-ui .opblock-summary-method { border-radius:999px !important; font: 800 11px var(--font-mono); padding:7px 16px; }
-.swagger-ui .opblock-summary-method-get { background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%) !important; color:#f0f9ff !important; border:1px solid rgba(103,232,249,.5) !important; }
-.swagger-ui .opblock-summary-method-post { background: linear-gradient(135deg, #34d399 0%, #059669 100%) !important; color:#ecfdf5 !important; border:1px solid rgba(110,231,183,.55) !important; }
-.swagger-ui .btn, .swagger-ui select, .swagger-ui input, .swagger-ui textarea { border-radius:10px; border-color:var(--border-soft); background:rgba(4,8,16,.72); color:var(--text); }
-.swagger-ui .btn.execute { background: linear-gradient(135deg, #10b981 0%, #06b6d4 60%, #0ea5e9 100%); color:#021014; font-weight:700; border-radius:999px !important; padding:10px 26px; border:0; }
-.swagger-ui .highlight-code, .swagger-ui .microlight { background:#040810 !important; color:#7dd3fc !important; border-radius:8px; }
-.swagger-ui .response-col_status { font-family:var(--font-mono); font-weight:700; }
-.gw-footer { text-align:center; padding:2rem 1rem 1rem; font-size:.74rem; color:var(--text-faint); position:relative; z-index:1; }
-.gw-footer span { background: linear-gradient(135deg, #34d399, #22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700; }
-@media (max-width:720px) { .gw-brand-header { padding:.85rem 1rem; } .gw-brand-title { font-size:1.15rem; } }
-</style>
-<header class="gw-brand-header">
-  <div class="gw-brand-wrap">
-    <div class="gw-brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
-    <div><div class="gw-brand-title">GridWise<span style="font-family:var(--font-mono);font-size:.65rem;font-weight:700;letter-spacing:.14em;background:linear-gradient(135deg,rgba(16,185,129,.18),rgba(6,182,212,.18));color:#5eead4;padding:3px 9px;border-radius:6px;border:1px solid rgba(94,234,212,.25);margin-left:.5rem;">LLM</span></div>
-    <div style="font-size:.72rem;color:var(--text-muted);font-weight:500;letter-spacing:.04em;margin-top:3px;text-transform:uppercase;">Campus Energy Optimization · API Reference</div></div>
-  </div>
-  <div class="gw-nav">
-    <div class="gw-status-pill"><span class="gw-pulse"></span><span>OpenAPI 3 · Live</span></div>
-    <a href="/" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"></path><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"></path></svg> Dashboard</a>
-    <a href="/health?ui=1" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> Health</a>
-  </div>
-</header>
-<div class="gw-footer">Crafted for <span>BUP CSE Fest 2026</span> · GridWise LLM Optimization Engine</div>
-"""
-
-_HEALTH_HTML = """<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+def _render_health_html() -> str:
+    """Polished dark glass-morphism health probe page."""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GridWise · Health Probe</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap" rel="stylesheet">
-<style>
-:root{--bg-deep:#04060f;--surface:rgba(13,19,33,.72);--border:rgba(255,255,255,.08);--text:#f8fafc;--muted:#94a3b8;--dim:#64748b;--green:#10b981;--cyan:#06b6d4;--violet:#c4b5fd;--font-main:'Plus Jakarta Sans',sans-serif;--font-display:'Fraunces',serif;--font-mono:'JetBrains Mono',monospace}
-*{box-sizing:border-box}html,body{margin:0;min-height:100vh}body{display:grid;place-items:center;padding:clamp(20px,4vw,48px);color:var(--text);font-family:var(--font-main);background:var(--bg-deep);background-image:radial-gradient(ellipse 70% 50% at 50% -10%,rgba(6,182,212,.18),transparent 65%),radial-gradient(ellipse 50% 40% at 90% 10%,rgba(16,185,129,.12),transparent 60%);background-attachment:fixed;-webkit-font-smoothing:antialiased}
-.shell{width:min(820px,100%);position:relative;z-index:1}
-.brand{display:flex;align-items:center;gap:16px;margin-bottom:26px}
-.mark{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#10b981,#06b6d4 60%,#0ea5e9);box-shadow:0 0 30px rgba(16,185,129,.4),inset 0 1px 0 rgba(255,255,255,.3);color:#fff}
-.mark svg{width:24px;height:24px}
-h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:clamp(1.85rem,4vw,2.6rem);letter-spacing:-0.03em;color:#fff;line-height:1.1}
-.eyebrow{margin:6px 0 0;color:var(--muted);font-size:.84rem;letter-spacing:.02em}
-.card{padding:clamp(28px,5vw,48px);border:1px solid var(--border);border-radius:22px;background:var(--surface);box-shadow:0 24px 60px -12px rgba(0,0,0,.6);backdrop-filter:blur(28px) saturate(150%)}
-.status{display:flex;align-items:center;gap:14px;padding:18px 22px;border:1px solid rgba(16,185,129,.28);border-radius:14px;background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(16,185,129,.04));color:#6ee7b7;font-weight:600}
-.dot{position:relative;width:11px;height:11px;border-radius:50%;background:#34d399}
-.dot::before{content:'';position:absolute;inset:-5px;border-radius:50%;background:#34d399;opacity:.4;animation:pulse 2.2s ease-in-out infinite}
-@keyframes pulse{0%,100%{transform:scale(.8);opacity:.5}50%{transform:scale(1.4);opacity:0}}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:22px}
-.metric{padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:rgba(6,11,22,.55);position:relative;overflow:hidden}
-.metric::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--cyan),var(--violet));opacity:.5}
-.label{color:var(--dim);font-family:var(--font-mono);font-size:.65rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
-.value{margin-top:8px;color:var(--text);font-family:var(--font-mono);font-weight:700;font-size:1.02rem;overflow-wrap:anywhere}
-.links{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
-a{padding:10px 16px;border:1px solid var(--border);border-radius:10px;color:#cbd5e1;text-decoration:none;font-size:.82rem;font-weight:600;background:rgba(255,255,255,.04)}
-a:hover{border-color:rgba(34,211,238,.4);color:#fff;background:rgba(34,211,238,.1)}
-@media (max-width:520px){.grid{grid-template-columns:1fr}}
-</style></head>
-<body><main class="shell">
-<div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
-<div><h1>GridWise Health Probe</h1><p class="eyebrow">Live service readiness and runtime status</p></div></div>
-<section class="card">
-<div class="status"><span class="dot"></span><span id="health-status">Checking service health…</span></div>
-<div class="grid">
-<div class="metric"><div class="label">API Status</div><div class="value" id="api-status">—</div></div>
-<div class="metric"><div class="label">Version</div><div class="value" id="version">—</div></div>
-<div class="metric"><div class="label">Solver</div><div class="value" id="solver">—</div></div>
-<div class="metric"><div class="label">LLM Configured</div><div class="value" id="llm">—</div></div>
-</div>
-<nav class="links"><a href="/">← Live Dashboard</a><a href="/docs">Swagger Docs</a><a href="/health">JSON Response</a></nav>
-</section></main>
+{_FONT_LINK}
+<link rel="stylesheet" href="/static/page.css">
+<link rel="stylesheet" href="/static/health.css">
+</head>
+<body>
+{_topbar('health')}
+<main class="gw-container">
+  <div class="health-shell">
+    <header style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
+      <div class="gw-brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <div>
+        <h1 style="margin:0;font-family:var(--font-display);font-weight:500;font-size:clamp(1.85rem,4vw,2.6rem);letter-spacing:-0.03em;color:#fff;line-height:1.1;">GridWise Health Probe</h1>
+        <p class="health-eyebrow">Live service readiness and runtime status</p>
+      </div>
+    </header>
+    <section class="health-card">
+      <div class="health-status" id="health-status">
+        <span class="health-dot"></span>
+        <span id="health-status-text">Checking service health…</span>
+      </div>
+      <div class="health-grid">
+        <div class="health-metric">
+          <div class="health-label">API Status</div>
+          <div class="health-value" id="api-status">—</div>
+        </div>
+        <div class="health-metric">
+          <div class="health-label">Service</div>
+          <div class="health-value" id="service-name">{settings.APP_NAME}</div>
+        </div>
+        <div class="health-metric">
+          <div class="health-label">Version</div>
+          <div class="health-value" id="version">—</div>
+        </div>
+        <div class="health-metric">
+          <div class="health-label">Solver</div>
+          <div class="health-value" id="solver">—</div>
+        </div>
+        <div class="health-metric">
+          <div class="health-label">LLM Mode</div>
+          <div class="health-value" id="llm-mode">—</div>
+        </div>
+        <div class="health-metric">
+          <div class="health-label">Active Models</div>
+          <div class="health-value" id="llm-models">—</div>
+        </div>
+      </div>
+      <div class="health-meta">
+        <span><strong>Endpoint</strong> /health · /api/status</span>
+        <span><strong>JSON probe</strong> <a href="/health" style="color:#22d3ee;text-decoration:none;">GET /health</a></span>
+      </div>
+      <nav class="health-action-row">
+        <a href="/">← Live Dashboard</a>
+        <a href="/docs">Swagger Docs</a>
+        <a href="/api/status">JSON Status</a>
+        <a href="/optimize-energy" onclick="event.preventDefault();alert('POST /optimize-energy — see Swagger for usage');">Optimize Endpoint</a>
+      </nav>
+    </section>
+  </div>
+</main>
+{_footer()}
 <script>
-Promise.all([fetch('/health'), fetch('/api/status')]).then(async ([h, s]) => {
-  const health = await h.json(), status = await s.json();
-  document.getElementById('health-status').textContent = health.status==='ok'?'Service is healthy and ready':'Service reported an issue';
-  document.getElementById('api-status').textContent = health.status.toUpperCase();
-  document.getElementById('version').textContent = status.version;
-  document.getElementById('solver').textContent = status.solver;
-  document.getElementById('llm').textContent = status.llm_configured?'Configured':'Offline fallback';
-}).catch(()=>{document.getElementById('health-status').textContent='Unable to reach service'});
-</script></body></html>"""
+(async function () {{
+  const err = (msg) => {{
+    document.getElementById('health-status-text').textContent = msg;
+    document.getElementById('health-status').classList.add('error');
+    document.getElementById('api-status').textContent = 'ERROR';
+    document.getElementById('api-status').classList.add('warn');
+  }};
+  try {{
+    const [h, s] = await Promise.all([
+      fetch('/health').then((r) => r.json()),
+      fetch('/api/status').then((r) => r.json()),
+    ]);
+    const ok = h && h.status === 'ok';
+    document.getElementById('health-status-text').textContent = ok
+      ? 'Service is healthy and ready'
+      : 'Service reported an issue';
+    document.getElementById('health-status').classList.toggle('error', !ok);
+    document.getElementById('api-status').textContent = ok ? 'OK' : String(h?.status || '—').toUpperCase();
+    document.getElementById('api-status').classList.toggle('ok', ok);
+    document.getElementById('version').textContent = s.version || '—';
+    document.getElementById('solver').textContent = s.solver || '—';
+    document.getElementById('llm-mode').textContent = s.llm_configured
+      ? 'Online (Gemini)'
+      : 'Offline · deterministic fallback';
+    document.getElementById('llm-mode').classList.toggle('ok', !!s.llm_configured);
+    document.getElementById('llm-mode').classList.toggle('warn', !s.llm_configured);
+    document.getElementById('llm-models').textContent =
+      (s.llm_models || []).join(', ') || 'fallback parser';
+  }} catch (e) {{
+    err('Unable to reach service');
+  }}
+}})();
+</script>
+</body>
+</html>"""

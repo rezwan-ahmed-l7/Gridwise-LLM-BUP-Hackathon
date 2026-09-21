@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/page.css" />
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -28,11 +29,15 @@
             </div>
         </div>
         <nav class="nav-actions">
-            <a href="/docs" target="_blank" class="nav-link">
+            <a href="/" class="nav-link active" aria-current="page">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/></svg>
+                Dashboard
+            </a>
+            <a href="/docs" class="nav-link">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
                 Swagger
             </a>
-            <a href="/health?ui=1" target="_blank" class="nav-link">
+            <a href="/health?ui=1" class="nav-link">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 Health
             </a>
@@ -122,7 +127,7 @@
 
         <!-- Results pane -------------------------------------------------- -->
         <section class="pane" id="pane-results">
-            <div class="kpi-grid" id="kpi-grid">
+            <div class="kpi-grid" id="kpi-grid-results">
                 <div class="kpi"><div class="kpi-label">Total Cost</div><div class="kpi-value" id="kpi-cost">—</div><div class="kpi-sub" id="kpi-cost-sub">BDT</div></div>
                 <div class="kpi"><div class="kpi-label">Total Grid Import</div><div class="kpi-value" id="kpi-grid">—</div><div class="kpi-sub">kWh</div></div>
                 <div class="kpi"><div class="kpi-label">Peak Grid</div><div class="kpi-value" id="kpi-peak">—</div><div class="kpi-sub">kWh (single hour)</div></div>

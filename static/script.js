@@ -1,6 +1,12 @@
 /* =============================================================================
    GridWise LLM — Dashboard Logic
    Handles API calls, validation, rendering, and Chart.js visualizations.
+
+   Defensive design:
+     * Every DOM lookup is null-checked via the `el()` helper.
+     * Charts only render when their canvas is visible (display !== none).
+     * All render paths are wrapped in try/catch so a single bug never breaks
+       the entire UI.
    ============================================================================= */
 
 (function () {
@@ -14,33 +20,109 @@
         lastResponse: null,    // OptimizeResponse
         lastAnalyze: null,     // AnalyzeResponse (or null)
         charts: {},
+        tariffs: [],           // Per-hour tariff (BDT/kWh) for chart math
     };
 
     // =========================================================================
-    // DOM helpers
+    // Safe DOM helpers  (THE FIX FOR THE NULL textContent BUG)
     // =========================================================================
-    const $ = (id) => document.getElementById(id);
-    const fmtNumber = (n, digits = 2) =>
-        Number(n || 0).toLocaleString(undefined, {
+    /**
+     * Safe `getElementById` — returns the element or `null`.
+     * Use `el(id)` to check for existence before mutating.
+     */
+    function el(id) {
+        const node = document.getElementById(id);
+        return node; // null if not in DOM
+    }
+
+    /**
+     * Set textContent only when the element exists. Logs a single warning
+     * so silent bugs become visible during development.
+     */
+    function setText(id, value) {
+        const node = el(id);
+        if (!node) {
+            // Throttled warn to avoid console flooding during render.
+            if (!setText._warned) setText._warned = new Set();
+            if (!setText._warned.has(id)) {
+                console.warn(`[GridWise] Missing element #${id}`);
+                setText._warned.add(id);
+            }
+            return;
+        }
+        node.textContent = value;
+    }
+
+    /**
+     * Set innerHTML only when the element exists.
+     */
+    function setHTML(id, value) {
+        const node = el(id);
+        if (!node) return;
+        node.innerHTML = value;
+    }
+
+    /**
+     * Toggle `hidden` attribute only when the element exists.
+     */
+    function setHidden(id, hidden) {
+        const node = el(id);
+        if (!node) return;
+        node.hidden = !!hidden;
+    }
+
+    /**
+     * Return true if the element is currently visible (display !== none and
+     * the element itself + all ancestors are not hidden).  Charts inside a
+     * hidden pane cannot be measured by Chart.js and would render at 0 size.
+     */
+    function isVisible(node) {
+        if (!node) return false;
+        if (node.hidden) return false;
+        const style = window.getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        return true;
+    }
+
+    const fmtNumber = (n, digits = 2) => {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return "—";
+        return v.toLocaleString(undefined, {
             minimumFractionDigits: digits,
             maximumFractionDigits: digits,
         });
+    };
+
+    const escape = (str) =>
+        String(str ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
 
     // =========================================================================
     // Tab navigation
     // =========================================================================
+    function activateTab(name) {
+        document.querySelectorAll(".tab").forEach((t) => {
+            t.classList.toggle("active", t.dataset.tab === name);
+        });
+        document.querySelectorAll(".pane").forEach((p) => {
+            p.classList.toggle("active", p.id === `pane-${name}`);
+        });
+    }
+
     document.querySelectorAll(".tab").forEach((tab) => {
         tab.addEventListener("click", () => {
             const target = tab.dataset.tab;
-            document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-            document.querySelectorAll(".pane").forEach((p) =>
-                p.classList.toggle("active", p.id === `pane-${target}`)
-            );
+            activateTab(target);
+            // Re-render so charts (which need a visible canvas) draw correctly.
             if (target === "results" && state.lastResponse) {
                 renderResults(state.lastResponse);
             } else if (target === "analytics" && state.lastAnalyze) {
                 renderAnalytics(state.lastAnalyze);
-            } else if (target === "raw" && state.lastResponse) {
+            } else if (target === "raw") {
                 renderRawJson();
             }
         });
@@ -50,15 +132,16 @@
     // Toast notifications
     // =========================================================================
     function toast(message, type = "info") {
-        const container = $("toast-container");
-        const el = document.createElement("div");
-        el.className = `toast ${type}`;
-        el.textContent = message;
-        container.appendChild(el);
+        const container = el("toast-container");
+        if (!container) return;
+        const node = document.createElement("div");
+        node.className = `toast ${type}`;
+        node.textContent = message;
+        container.appendChild(node);
         setTimeout(() => {
-            el.style.opacity = "0";
-            el.style.transform = "translateX(20px)";
-            setTimeout(() => el.remove(), 300);
+            node.style.opacity = "0";
+            node.style.transform = "translateX(20px)";
+            setTimeout(() => node.remove(), 300);
         }, 3500);
     }
 
@@ -103,7 +186,7 @@
     // Preset loading
     // =========================================================================
     async function loadPresets() {
-        const container = $("preset-list");
+        const container = el("preset-list");
         try {
             const res = await fetch("/api/presets");
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -111,12 +194,13 @@
             renderPresets();
         } catch (err) {
             console.warn("Failed to load presets:", err);
-            container.innerHTML = '<p class="muted">No presets available.</p>';
+            if (container) container.innerHTML = '<p class="muted">No presets available.</p>';
         }
     }
 
     function renderPresets() {
-        const container = $("preset-list");
+        const container = el("preset-list");
+        if (!container) return;
         const entries = Object.entries(state.presets);
         if (entries.length === 0) {
             container.innerHTML = '<p class="muted">No presets available.</p>';
@@ -124,59 +208,70 @@
         }
         container.innerHTML = "";
         entries.forEach(([id, data]) => {
-            const el = document.createElement("div");
-            el.className = "preset-item";
-            el.innerHTML = `
+            const node = document.createElement("div");
+            node.className = "preset-item";
+            node.innerHTML = `
                 <div class="preset-label">${escape(data.label)}</div>
                 <div class="preset-id">${escape(id)} · click to load</div>
             `;
-            el.addEventListener("click", () => loadScenario(data.input));
-            container.appendChild(el);
+            node.addEventListener("click", () => loadScenario(data.input));
+            container.appendChild(node);
         });
     }
 
     function loadScenario(scenario) {
         if (!scenario) return;
-        $("scenario_id").value = scenario.scenario_id || "";
-        $("operator_notes").value = (scenario.operator_notes || []).join("\n");
-        $("hours_json").value = JSON.stringify(scenario.hours || [], null, 2);
+        const sid = el("scenario_id");
+        const notes = el("operator_notes");
+        const hoursEl = el("hours_json");
+        if (sid) sid.value = scenario.scenario_id || "";
+        if (notes) notes.value = (scenario.operator_notes || []).join("\n");
+        if (hoursEl) hoursEl.value = JSON.stringify(scenario.hours || [], null, 2);
         if (scenario.battery) {
-            $("b_capacity").value = scenario.battery.capacity_kwh;
-            $("b_initial").value = scenario.battery.initial_energy_kwh;
-            $("b_min").value = scenario.battery.minimum_energy_kwh;
-            $("b_charge").value = scenario.battery.max_charge_kwh_per_hour;
-            $("b_discharge").value = scenario.battery.max_discharge_kwh_per_hour;
+            const map = {
+                b_capacity: scenario.battery.capacity_kwh,
+                b_initial: scenario.battery.initial_energy_kwh,
+                b_min: scenario.battery.minimum_energy_kwh,
+                b_charge: scenario.battery.max_charge_kwh_per_hour,
+                b_discharge: scenario.battery.max_discharge_kwh_per_hour,
+            };
+            for (const [id, val] of Object.entries(map)) {
+                const node = el(id);
+                if (node) node.value = val;
+            }
         }
+        // Cache tariffs for chart math.
+        state.tariffs = (scenario.hours || []).map((h) => h.tariff_bdt_per_kwh);
+        window.__gridwiseTariffs = state.tariffs;
         toast(`Loaded scenario "${scenario.scenario_id}".`, "success");
     }
 
-    $("load-preset").addEventListener("click", () => {
+    function safeAddListener(id, handler) {
+        const node = el(id);
+        if (node) node.addEventListener("click", handler);
+    }
+
+    safeAddListener("load-preset", () => {
         const entries = Object.entries(state.presets);
         if (entries.length === 0) return loadScenario(getSampleScenario());
-        const [, first] = entries[0];
-        loadScenario(first.input);
+        loadScenario(entries[0][1].input);
     });
 
-    $("load-sample-notes").addEventListener("click", () => {
+    safeAddListener("load-sample-notes", () => {
         const sample = getSampleScenario();
-        $("scenario_id").value = sample.scenario_id;
-        $("operator_notes").value = sample.operator_notes.join("\n");
-        $("hours_json").value = JSON.stringify(sample.hours, null, 2);
-        if (!state.presets || Object.keys(state.presets).length === 0) {
-            $("b_capacity").value = sample.battery.capacity_kwh;
-            $("b_initial").value = sample.battery.initial_energy_kwh;
-            $("b_min").value = sample.battery.minimum_energy_kwh;
-            $("b_charge").value = sample.battery.max_charge_kwh_per_hour;
-            $("b_discharge").value = sample.battery.max_discharge_kwh_per_hour;
-        }
+        loadScenario(sample);
     });
 
     // =========================================================================
     // Build request payload from form
     // =========================================================================
     function buildRequest() {
-        const scenario_id = $("scenario_id").value.trim() || "SAMPLE-01";
-        const notesRaw = $("operator_notes").value.trim();
+        const sidEl = el("scenario_id");
+        const notesEl = el("operator_notes");
+        const hoursEl = el("hours_json");
+
+        const scenario_id = (sidEl ? sidEl.value : "").trim() || "SAMPLE-01";
+        const notesRaw = (notesEl ? notesEl.value : "").trim();
         if (!notesRaw) throw new Error("At least one operator note is required.");
         const operator_notes = notesRaw.split("\n").map((s) => s.trim()).filter(Boolean);
         if (operator_notes.length === 0 || operator_notes.length > 3) {
@@ -185,7 +280,7 @@
 
         let hours;
         try {
-            hours = JSON.parse($("hours_json").value);
+            hours = JSON.parse(hoursEl ? hoursEl.value : "[]");
         } catch (err) {
             throw new Error(`Hours JSON is invalid: ${err.message}`);
         }
@@ -193,16 +288,26 @@
             throw new Error("Hours array must contain exactly 24 entries.");
         }
 
-        const battery = {
-            capacity_kwh: parseFloat($("b_capacity").value),
-            initial_energy_kwh: parseFloat($("b_initial").value),
-            minimum_energy_kwh: parseFloat($("b_min").value),
-            max_charge_kwh_per_hour: parseFloat($("b_charge").value),
-            max_discharge_kwh_per_hour: parseFloat($("b_discharge").value),
-        };
-        for (const [k, v] of Object.entries(battery)) {
-            if (!Number.isFinite(v)) throw new Error(`Battery field "${k}" is invalid.`);
+        const batteryFields = ["b_capacity", "b_initial", "b_min", "b_charge", "b_discharge"];
+        const batteryKeys = [
+            "capacity_kwh",
+            "initial_energy_kwh",
+            "minimum_energy_kwh",
+            "max_charge_kwh_per_hour",
+            "max_discharge_kwh_per_hour",
+        ];
+        const battery = {};
+        for (let i = 0; i < batteryFields.length; i++) {
+            const id = batteryFields[i];
+            const key = batteryKeys[i];
+            const v = parseFloat(el(id)?.value);
+            if (!Number.isFinite(v)) throw new Error(`Battery field "${key}" is invalid.`);
+            battery[key] = v;
         }
+
+        // Cache tariffs for chart math.
+        state.tariffs = hours.map((h) => Number(h.tariff_bdt_per_kwh) || 0);
+        window.__gridwiseTariffs = state.tariffs;
 
         return { scenario_id, operator_notes, hours, battery };
     }
@@ -210,59 +315,63 @@
     // =========================================================================
     // Run optimization
     // =========================================================================
-    $("run-optimize").addEventListener("click", async () => {
-        const btn = $("run-optimize");
-        const errEl = $("form-error");
-        errEl.textContent = "";
+    function bindRunButton() {
+        const btn = el("run-optimize");
+        if (!btn) return;
+        btn.addEventListener("click", async () => {
+            const errEl = el("form-error");
+            if (errEl) errEl.textContent = "";
 
-        let payload;
-        try {
-            payload = buildRequest();
-        } catch (err) {
-            errEl.textContent = err.message;
-            toast(err.message, "error");
-            return;
-        }
-
-        btn.classList.add("is-loading");
-        btn.disabled = true;
-
-        try {
-            const res = await fetch("/optimize-energy", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) {
-                const detail = await safeError(res);
-                throw new Error(detail);
-            }
-            const data = await res.json();
-            state.lastResponse = data;
-
-            // Also try to fetch analytics (non-blocking if it fails)
+            let payload;
             try {
-                const ar = await fetch("/api/analyze", {
+                payload = buildRequest();
+            } catch (err) {
+                if (errEl) errEl.textContent = err.message;
+                toast(err.message, "error");
+                return;
+            }
+
+            btn.classList.add("is-loading");
+            btn.disabled = true;
+
+            try {
+                const res = await fetch("/optimize-energy", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
-                if (ar.ok) state.lastAnalyze = await ar.json();
-            } catch (e) {
-                console.warn("Analytics call failed:", e);
-            }
+                if (!res.ok) {
+                    const detail = await safeError(res);
+                    throw new Error(detail);
+                }
+                const data = await res.json();
+                state.lastResponse = data;
 
-            renderResults(data);
-            switchTab("results");
-            toast("Optimization complete.", "success");
-        } catch (err) {
-            errEl.textContent = err.message;
-            toast(err.message, "error");
-        } finally {
-            btn.classList.remove("is-loading");
-            btn.disabled = false;
-        }
-    });
+                // Fire-and-forget analytics call (non-blocking if it fails).
+                fetch("/api/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                })
+                    .then((ar) => (ar.ok ? ar.json() : null))
+                    .then((j) => {
+                        if (j) state.lastAnalyze = j;
+                    })
+                    .catch((e) => console.warn("Analytics call failed:", e));
+
+                renderResults(data);
+                activateTab("results");
+                toast("Optimization complete.", "success");
+            } catch (err) {
+                console.error("Optimization failed:", err);
+                if (errEl) errEl.textContent = err.message;
+                toast(err.message, "error");
+            } finally {
+                btn.classList.remove("is-loading");
+                btn.disabled = false;
+            }
+        });
+    }
 
     async function safeError(res) {
         try {
@@ -273,58 +382,62 @@
         }
     }
 
-    function switchTab(name) {
-        document.querySelectorAll(".tab").forEach((t) =>
-            t.classList.toggle("active", t.dataset.tab === name)
-        );
-        document.querySelectorAll(".pane").forEach((p) =>
-            p.classList.toggle("active", p.id === `pane-${name}`)
-        );
-    }
-
     // =========================================================================
-    // Render results
+    // Render results  (THE FIX: every mutation is null-safe + try/catch)
     // =========================================================================
     function renderResults(data) {
-        // KPIs
-        $("kpi-cost").textContent = fmtNumber(data.total_cost_bdt, 2);
-        $("kpi-grid").textContent = fmtNumber(data.total_grid_kwh, 2);
-        $("kpi-peak").textContent = fmtNumber(data.peak_grid_kwh, 2);
-        const totalSolar = data.hourly_plan.reduce((s, p) => s + p.solar_used_kwh, 0);
-        $("kpi-solar").textContent = fmtNumber(totalSolar, 2);
+        if (!data) return;
+        try {
+            // KPIs — null-safe via setText().
+            setText("kpi-cost", fmtNumber(data.total_cost_bdt, 2));
+            setText("kpi-grid", fmtNumber(data.total_grid_kwh, 2));
+            setText("kpi-peak", fmtNumber(data.peak_grid_kwh, 2));
+            const totalSolar = (data.hourly_plan || []).reduce(
+                (s, p) => s + (Number(p.solar_used_kwh) || 0), 0
+            );
+            setText("kpi-solar", fmtNumber(totalSolar, 2));
 
-        // Charts
-        renderMixChart(data);
-        renderCostGridChart(data);
-        renderSocChart(data);
+            // Charts — each wrapped individually so one failure doesn't kill the rest.
+            safeRender(() => renderMixChart(data), "mix chart");
+            safeRender(() => renderCostGridChart(data), "cost/grid chart");
+            safeRender(() => renderSocChart(data), "SoC chart");
 
-        // Directives
-        renderDirectives(data.directive_interpretation);
+            // Directives
+            safeRender(() => renderDirectives(data.directive_interpretation || []), "directives");
 
-        // Hourly table
-        renderHourlyTable(data);
+            // Hourly table
+            safeRender(() => renderHourlyTable(data), "hourly table");
 
-        // Warnings
-        if (data.warnings && data.warnings.length) {
-            $("warnings-card").hidden = false;
-            $("warning-list").innerHTML = data.warnings
-                .map((w) => `<li>⚠ ${escape(w)}</li>`)
-                .join("");
-        } else {
-            $("warnings-card").hidden = true;
+            // Warnings
+            const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+            if (warnings.length > 0) {
+                setHidden("warnings-card", false);
+                setHTML("warning-list", warnings.map((w) => `<li>⚠ ${escape(w)}</li>`).join(""));
+            } else {
+                setHidden("warnings-card", true);
+            }
+
+            // Analytics tab content (deferred until tab opened)
+            if (state.lastAnalyze) safeRender(() => renderAnalytics(state.lastAnalyze), "analytics");
+
+            // Raw JSON tab content
+            safeRender(renderRawJson, "raw JSON");
+        } catch (err) {
+            // Catch-all so the UI never freezes after a render bug.
+            console.error("[GridWise] renderResults crashed:", err);
+            toast("Failed to render results. See console.", "error");
         }
+    }
 
-        // Analytics tab content
-        if (state.lastAnalyze) renderAnalytics(state.lastAnalyze);
-
-        // Raw JSON
-        renderRawJson();
+    function safeRender(fn, label) {
+        try { fn(); }
+        catch (err) { console.error(`[GridWise] ${label} render failed:`, err); }
     }
 
     // ---- Charts -----------------------------------------------------------
     function destroyChart(key) {
         if (state.charts[key]) {
-            state.charts[key].destroy();
+            try { state.charts[key].destroy(); } catch (_) { /* noop */ }
             delete state.charts[key];
         }
     }
@@ -350,299 +463,348 @@
         };
     }
 
+    /**
+     * Charts inside a hidden (`display:none`) pane render at 0 × 0 because
+     * Chart.js can't measure them.  We re-create the chart lazily — every
+     * time the canvas becomes visible (tab switch) AND we already have data.
+     */
+    function renderChartIfVisible(canvasId, key, factory) {
+        const canvas = el(canvasId);
+        if (!canvas) {
+            console.warn(`[GridWise] Missing canvas #${canvasId}`);
+            return;
+        }
+        if (!isVisible(canvas)) {
+            // Defer: install a one-shot listener that re-renders on first show.
+            const parent = canvas.closest(".pane");
+            if (parent && !parent.dataset[`pending_${key}`]) {
+                parent.dataset[`pending_${key}`] = "1";
+                const obs = new MutationObserver(() => {
+                    if (isVisible(canvas)) {
+                        obs.disconnect();
+                        delete parent.dataset[`pending_${key}`];
+                        safeRender(() => factory(), `${key} (deferred)`);
+                    }
+                });
+                obs.observe(parent, { attributes: true, attributeFilter: ["class", "hidden", "style"] });
+            }
+            return;
+        }
+        factory();
+    }
+
     function renderMixChart(data) {
-        destroyChart("mix");
-        const labels = data.hourly_plan.map((p) => p.hour);
-        const ctx = document.getElementById("chart-mix").getContext("2d");
+        renderChartIfVisible("chart-mix", "mix", () => {
+            destroyChart("mix");
+            const canvas = el("chart-mix");
+            if (!canvas) return;
+            const ctx = canvas.getContext("2d");
+            const labels = (data.hourly_plan || []).map((p) => p.hour);
 
-        const gradientSolar = ctx.createLinearGradient(0, 0, 0, 280);
-        gradientSolar.addColorStop(0, "rgba(251, 191, 36, 0.85)");
-        gradientSolar.addColorStop(1, "rgba(251, 191, 36, 0.3)");
+            const gradientSolar = ctx.createLinearGradient(0, 0, 0, 280);
+            gradientSolar.addColorStop(0, "rgba(251, 191, 36, 0.85)");
+            gradientSolar.addColorStop(1, "rgba(251, 191, 36, 0.3)");
 
-        const gradientGrid = ctx.createLinearGradient(0, 0, 0, 280);
-        gradientGrid.addColorStop(0, "rgba(56, 189, 248, 0.85)");
-        gradientGrid.addColorStop(1, "rgba(56, 189, 248, 0.3)");
+            const gradientGrid = ctx.createLinearGradient(0, 0, 0, 280);
+            gradientGrid.addColorStop(0, "rgba(56, 189, 248, 0.85)");
+            gradientGrid.addColorStop(1, "rgba(56, 189, 248, 0.3)");
 
-        const discharge = data.hourly_plan.map((p) =>
-            p.battery_action === "discharge" ? p.battery_kwh : 0
-        );
-        const charge = data.hourly_plan.map((p) =>
-            p.battery_action === "charge" ? p.battery_kwh : 0
-        );
+            const discharge = (data.hourly_plan || []).map((p) =>
+                p.battery_action === "discharge" ? p.battery_kwh : 0
+            );
+            const charge = (data.hourly_plan || []).map((p) =>
+                p.battery_action === "charge" ? p.battery_kwh : 0
+            );
 
-        state.charts.mix = new Chart(ctx, {
-            type: "bar",
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: "Solar (kWh)",
-                        data: data.hourly_plan.map((p) => p.solar_used_kwh),
-                        backgroundColor: gradientSolar,
-                        stack: "supply",
-                        borderRadius: 3,
+            state.charts.mix = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "Solar (kWh)",
+                            data: (data.hourly_plan || []).map((p) => p.solar_used_kwh),
+                            backgroundColor: gradientSolar,
+                            stack: "supply",
+                            borderRadius: 3,
+                        },
+                        {
+                            label: "Grid (kWh)",
+                            data: (data.hourly_plan || []).map((p) => p.grid_kwh),
+                            backgroundColor: gradientGrid,
+                            stack: "supply",
+                            borderRadius: 3,
+                        },
+                        {
+                            label: "Battery Discharge",
+                            data: discharge,
+                            type: "line",
+                            borderColor: "#c4b5fd",
+                            backgroundColor: "rgba(196,181,253,0.15)",
+                            tension: 0.35,
+                            fill: false,
+                            pointRadius: 2,
+                            yAxisID: "y",
+                        },
+                        {
+                            label: "Battery Charge",
+                            data: charge,
+                            type: "line",
+                            borderColor: "#34d399",
+                            borderDash: [4, 4],
+                            backgroundColor: "rgba(52,211,153,0.15)",
+                            tension: 0.35,
+                            fill: false,
+                            pointRadius: 2,
+                            yAxisID: "y",
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 600 },
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
+                        },
+                        tooltip: {
+                            backgroundColor: "rgba(4,8,16,0.92)",
+                            borderColor: "rgba(34,211,238,0.4)",
+                            borderWidth: 1,
+                            titleColor: "#fff",
+                            bodyColor: "#cbd5e1",
+                            padding: 10,
+                        },
                     },
-                    {
-                        label: "Grid (kWh)",
-                        data: data.hourly_plan.map((p) => p.grid_kwh),
-                        backgroundColor: gradientGrid,
-                        stack: "supply",
-                        borderRadius: 3,
-                    },
-                    {
-                        label: "Battery Discharge",
-                        data: discharge,
-                        type: "line",
-                        borderColor: "#c4b5fd",
-                        backgroundColor: "rgba(196,181,253,0.15)",
-                        tension: 0.35,
-                        fill: false,
-                        pointRadius: 2,
-                        yAxisID: "y",
-                    },
-                    {
-                        label: "Battery Charge",
-                        data: charge,
-                        type: "line",
-                        borderColor: "#34d399",
-                        borderDash: [4, 4],
-                        backgroundColor: "rgba(52,211,153,0.15)",
-                        tension: 0.35,
-                        fill: false,
-                        pointRadius: 2,
-                        yAxisID: "y",
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: "index", intersect: false },
-                plugins: {
-                    legend: {
-                        labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
-                    },
-                    tooltip: {
-                        backgroundColor: "rgba(4,8,16,0.92)",
-                        borderColor: "rgba(34,211,238,0.4)",
-                        borderWidth: 1,
-                        titleColor: "#fff",
-                        bodyColor: "#cbd5e1",
-                        padding: 10,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { color: chartGridColor },
+                            ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
+                        },
+                        y: {
+                            stacked: true,
+                            grid: { color: chartGridColor },
+                            ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
+                            beginAtZero: true,
+                            title: { display: true, text: "kWh", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } },
+                        },
                     },
                 },
-                scales: {
-                    x: {
-                        stacked: true,
-                        grid: { color: chartGridColor },
-                        ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
-                    },
-                    y: {
-                        stacked: true,
-                        grid: { color: chartGridColor },
-                        ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
-                        beginAtZero: true,
-                        title: { display: true, text: "kWh", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } },
-                    },
-                },
-            },
+            });
         });
     }
 
     function renderCostGridChart(data) {
-        destroyChart("costGrid");
-        const labels = data.hourly_plan.map((p) => p.hour);
-        const ctx = document.getElementById("chart-cost-grid").getContext("2d");
+        renderChartIfVisible("chart-cost-grid", "costGrid", () => {
+            destroyChart("costGrid");
+            const canvas = el("chart-cost-grid");
+            if (!canvas) return;
+            const ctx = canvas.getContext("2d");
+            const labels = (data.hourly_plan || []).map((p) => p.hour);
+            const tariffs = state.tariffs || [];
 
-        const ctx1 = ctx;
-        const gradGrid = ctx1.createLinearGradient(0, 0, 0, 280);
-        gradGrid.addColorStop(0, "rgba(56, 189, 248, 0.45)");
-        gradGrid.addColorStop(1, "rgba(56, 189, 248, 0.05)");
+            const gradGrid = ctx.createLinearGradient(0, 0, 0, 280);
+            gradGrid.addColorStop(0, "rgba(56, 189, 248, 0.45)");
+            gradGrid.addColorStop(1, "rgba(56, 189, 248, 0.05)");
 
-        state.charts.costGrid = new Chart(ctx1, {
-            data: {
-                labels,
-                datasets: [
-                    {
-                        type: "bar",
-                        label: "Grid (kWh)",
-                        data: data.hourly_plan.map((p) => p.grid_kwh),
-                        backgroundColor: gradGrid,
-                        borderColor: "#38bdf8",
-                        borderWidth: 1,
-                        yAxisID: "y",
-                        order: 2,
+            state.charts.costGrid = new Chart(ctx, {
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            type: "bar",
+                            label: "Grid (kWh)",
+                            data: (data.hourly_plan || []).map((p) => p.grid_kwh),
+                            backgroundColor: gradGrid,
+                            borderColor: "#38bdf8",
+                            borderWidth: 1,
+                            yAxisID: "y",
+                            order: 2,
+                        },
+                        {
+                            type: "line",
+                            label: "Cost (BDT)",
+                            data: (data.hourly_plan || []).map((p, i) => p.grid_kwh * (tariffs[i] || 0)),
+                            borderColor: "#c4b5fd",
+                            backgroundColor: "rgba(196,181,253,0.2)",
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 3,
+                            yAxisID: "y1",
+                            order: 1,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 600 },
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
+                        },
+                        tooltip: {
+                            backgroundColor: "rgba(4,8,16,0.92)",
+                            borderColor: "rgba(34,211,238,0.4)",
+                            borderWidth: 1,
+                            titleColor: "#fff",
+                            bodyColor: "#cbd5e1",
+                            padding: 10,
+                        },
                     },
-                    {
-                        type: "line",
-                        label: "Cost (BDT)",
-                        data: data.hourly_plan.map((p, i) => {
-                            const tariff = window.__gridwiseTariffs ? window.__gridwiseTariffs[i] : 0;
-                            return p.grid_kwh * tariff;
-                        }),
-                        borderColor: "#c4b5fd",
-                        backgroundColor: "rgba(196,181,253,0.2)",
-                        tension: 0.35,
-                        fill: true,
-                        pointRadius: 3,
-                        yAxisID: "y1",
-                        order: 1,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: "index", intersect: false },
-                plugins: {
-                    legend: {
-                        labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
-                    },
-                    tooltip: {
-                        backgroundColor: "rgba(4,8,16,0.92)",
-                        borderColor: "rgba(34,211,238,0.4)",
-                        borderWidth: 1,
-                        titleColor: "#fff",
-                        bodyColor: "#cbd5e1",
-                        padding: 10,
+                    scales: {
+                        x: {
+                            grid: { color: chartGridColor },
+                            ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
+                        },
+                        y: {
+                            position: "left",
+                            grid: { color: chartGridColor },
+                            ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
+                            beginAtZero: true,
+                            title: { display: true, text: "Grid (kWh)", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } },
+                        },
+                        y1: {
+                            position: "right",
+                            grid: { display: false },
+                            ticks: { color: "#c4b5fd", font: { family: CHART_FONT, size: 10 } },
+                            beginAtZero: true,
+                            title: { display: true, text: "Cost (BDT)", color: "#c4b5fd", font: { family: CHART_FONT, size: 11 } },
+                        },
                     },
                 },
-                scales: {
-                    x: {
-                        grid: { color: chartGridColor },
-                        ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
-                    },
-                    y: {
-                        position: "left",
-                        grid: { color: chartGridColor },
-                        ticks: { color: chartTickColor, font: { family: CHART_FONT, size: 10 } },
-                        beginAtZero: true,
-                        title: { display: true, text: "Grid (kWh)", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } },
-                    },
-                    y1: {
-                        position: "right",
-                        grid: { display: false },
-                        ticks: { color: "#c4b5fd", font: { family: CHART_FONT, size: 10 } },
-                        beginAtZero: true,
-                        title: { display: true, text: "Cost (BDT)", color: "#c4b5fd", font: { family: CHART_FONT, size: 11 } },
-                    },
-                },
-            },
+            });
         });
     }
 
     function renderSocChart(data) {
-        destroyChart("soc");
-        const labels = data.hourly_plan.map((p) => p.hour);
-        const ctx = document.getElementById("chart-soc").getContext("2d");
+        renderChartIfVisible("chart-soc", "soc", () => {
+            destroyChart("soc");
+            const canvas = el("chart-soc");
+            if (!canvas) return;
+            const ctx = canvas.getContext("2d");
+            const labels = (data.hourly_plan || []).map((p) => p.hour);
 
-        const gradient = ctx.createLinearGradient(0, 0, 0, 280);
-        gradient.addColorStop(0, "rgba(16, 185, 129, 0.45)");
-        gradient.addColorStop(1, "rgba(16, 185, 129, 0.05)");
+            const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+            gradient.addColorStop(0, "rgba(16, 185, 129, 0.45)");
+            gradient.addColorStop(1, "rgba(16, 185, 129, 0.05)");
 
-        state.charts.soc = new Chart(ctx, {
-            type: "line",
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: "State of Charge (kWh)",
-                        data: data.hourly_plan.map((p) => p.battery_energy_after_kwh),
-                        borderColor: "#10b981",
-                        backgroundColor: gradient,
-                        tension: 0.35,
-                        fill: true,
-                        pointRadius: 3,
-                        pointBackgroundColor: "#10b981",
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: "index", intersect: false },
-                plugins: {
-                    legend: {
-                        labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
-                    },
-                    tooltip: {
-                        backgroundColor: "rgba(4,8,16,0.92)",
-                        borderColor: "rgba(16,185,129,0.4)",
-                        borderWidth: 1,
-                        titleColor: "#fff",
-                        bodyColor: "#cbd5e1",
-                        padding: 10,
-                    },
+            state.charts.soc = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: "State of Charge (kWh)",
+                            data: (data.hourly_plan || []).map((p) => p.battery_energy_after_kwh),
+                            borderColor: "#10b981",
+                            backgroundColor: gradient,
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 3,
+                            pointBackgroundColor: "#10b981",
+                        },
+                    ],
                 },
-                scales: commonScales({
-                    y: { title: { display: true, text: "kWh", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } } },
-                }),
-            },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 600 },
+                    interaction: { mode: "index", intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: "#cbd5e1", font: { family: CHART_FONT, size: 11 } },
+                        },
+                        tooltip: {
+                            backgroundColor: "rgba(4,8,16,0.92)",
+                            borderColor: "rgba(16,185,129,0.4)",
+                            borderWidth: 1,
+                            titleColor: "#fff",
+                            bodyColor: "#cbd5e1",
+                            padding: 10,
+                        },
+                    },
+                    scales: commonScales({
+                        y: { title: { display: true, text: "kWh", color: "#94a3b8", font: { family: CHART_FONT, size: 11 } } },
+                    }),
+                },
+            });
         });
     }
 
     // ---- Directives -------------------------------------------------------
     function renderDirectives(directives) {
-        const container = $("directive-list");
-        if (!directives || directives.length === 0) {
+        const container = el("directive-list");
+        if (!container) return;
+        if (!Array.isArray(directives) || directives.length === 0) {
             container.innerHTML = '<p class="muted">No directives parsed.</p>';
             return;
         }
+
+        const notesEl = el("operator_notes");
+        const lines = notesEl ? notesEl.value.split("\n").map((s) => s.trim()).filter(Boolean) : [];
+
         container.innerHTML = "";
         directives.forEach((d) => {
-            const el = document.createElement("div");
-            el.className = `directive ${d.applies ? "applies" : "no-op"}`;
+            const node = document.createElement("div");
+            node.className = `directive ${d.applies ? "applies" : "no-op"}`;
             const adj = d.structured_adjustment || {};
             let adjText = "";
-            if (adj.hours && adj.hours.length) {
+            if (Array.isArray(adj.hours) && adj.hours.length) {
                 adjText = `hours [${adj.hours.join(", ")}]`;
             }
             if (adj.factor != null) adjText += ` · factor=${adj.factor}`;
             if (adj.minimum_energy_kwh != null) adjText += ` · min=${adj.minimum_energy_kwh} kWh`;
             if (adj.max_grid_kwh != null) adjText += ` · cap=${adj.max_grid_kwh} kWh`;
 
-            const noteText = (state.lastResponse && state.lastResponse._rawNotes && state.lastResponse._rawNotes[d.note_index])
-                || (() => {
-                    // Pull from form as a fallback
-                    const lines = $("operator_notes").value.split("\n").map((s) => s.trim()).filter(Boolean);
-                    return lines[d.note_index] || "(note)";
-                })();
+            const noteText = lines[d.note_index] || "(note)";
 
-            el.innerHTML = `
+            node.innerHTML = `
                 <div class="directive-head">
-                    <span class="directive-type ${d.directive_type}">${escape(d.directive_type)}</span>
+                    <span class="directive-type ${escape(d.directive_type)}">${escape(d.directive_type)}</span>
                     <span class="directive-meta">#${d.note_index} · ${d.applies ? "applies" : "no-op"}</span>
                 </div>
                 <div class="directive-note">${escape(noteText)}</div>
                 <div class="directive-explain">${escape(d.explanation || "")}</div>
                 ${adjText ? `<div class="directive-adjustment">${escape(adjText)}</div>` : ""}
             `;
-            container.appendChild(el);
+            container.appendChild(node);
         });
     }
 
     // ---- Hourly table -----------------------------------------------------
     function renderHourlyTable(data) {
         const tbody = document.querySelector("#hourly-table tbody");
-        const tariffs = window.__gridwiseTariffs || [];
-        let rows = "";
-        data.hourly_plan.forEach((p) => {
+        if (!tbody) { console.warn("[GridWise] Missing #hourly-table tbody"); return; }
+        const tariffs = state.tariffs || [];
+        const plan = data.hourly_plan || [];
+
+        if (plan.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="muted center">No hourly data.</td></tr>';
+            return;
+        }
+
+        const rows = plan.map((p) => {
             const tariff = tariffs[p.hour] || 0;
-            const cost = p.grid_kwh * tariff;
-            rows += `
+            const cost = (Number(p.grid_kwh) || 0) * tariff;
+            return `
                 <tr>
                     <td>${String(p.hour).padStart(2, "0")}:00</td>
                     <td class="num">${fmtNumber(tariff, 2)}</td>
-                    <td class="num">${fmtNumber(p.solar_used_kwh + p.grid_kwh + p.battery_kwh, 1)}</td>
+                    <td class="num">${fmtNumber((Number(p.solar_used_kwh) || 0) + (Number(p.grid_kwh) || 0) + (Number(p.battery_kwh) || 0), 1)}</td>
                     <td class="num">${fmtNumber(p.solar_used_kwh, 1)}</td>
                     <td class="num">${fmtNumber(p.grid_kwh, 1)}</td>
-                    <td><span class="action-pill action-${p.battery_action}">${p.battery_action}</span></td>
+                    <td><span class="action-pill action-${escape(p.battery_action)}">${escape(p.battery_action)}</span></td>
                     <td class="num">${fmtNumber(p.battery_kwh, 1)}</td>
                     <td class="num">${fmtNumber(p.battery_energy_after_kwh, 1)}</td>
                     <td class="num">${fmtNumber(cost, 2)}</td>
                 </tr>
             `;
-        });
+        }).join("");
         tbody.innerHTML = rows;
     }
 
@@ -650,32 +812,36 @@
     // Analytics render
     // =========================================================================
     function renderAnalytics(resp) {
+        if (!resp || !resp.analytics) return;
         const a = resp.analytics;
 
-        $("ana-savings").textContent = fmtNumber(a.savings_bdt, 2);
-        $("ana-savings-pct").textContent = `${fmtNumber(a.savings_pct, 1)}% saved`;
-        $("ana-peak-reduction").textContent = fmtNumber(a.peak_reduction_kwh, 2);
-        $("ana-solar-util").textContent = fmtNumber(a.solar_utilization_pct, 1);
-        $("ana-cycles").textContent = fmtNumber(a.equivalent_full_cycles, 2);
+        setText("ana-savings", fmtNumber(a.savings_bdt, 2));
+        setText("ana-savings-pct", `${fmtNumber(a.savings_pct, 1)}% saved`);
+        setText("ana-peak-reduction", fmtNumber(a.peak_reduction_kwh, 2));
+        setText("ana-solar-util", fmtNumber(a.solar_utilization_pct, 1));
+        setText("ana-cycles", fmtNumber(a.equivalent_full_cycles, 2));
 
         const tbody = document.querySelector("#insights-table tbody");
-        let rows = "";
-        a.hourly.forEach((row) => {
-            rows += `
-                <tr>
-                    <td>${String(row.hour).padStart(2, "0")}:00</td>
-                    <td class="num">${fmtNumber(row.tariff_bdt_per_kwh, 1)}</td>
-                    <td class="num">${fmtNumber(row.demand_kwh, 1)}</td>
-                    <td class="num">${fmtNumber(row.effective_solar_kwh, 1)}</td>
-                    <td class="num">${fmtNumber(row.min_reserve_kwh, 1)}</td>
-                    <td class="num">${row.max_grid_kwh == null ? "—" : fmtNumber(row.max_grid_kwh, 1)}</td>
-                    <td class="num">${row.charge_allowed ? '<span class="flag-yes">✓</span>' : '<span class="flag-no">✕</span>'}</td>
-                    <td class="num">${row.discharge_allowed ? '<span class="flag-yes">✓</span>' : '<span class="flag-no">✕</span>'}</td>
-                    <td class="num">${fmtNumber(row.baseline_grid_kwh, 1)}</td>
-                    <td class="num">${fmtNumber(row.cost_bdt, 2)}</td>
-                </tr>
-            `;
-        });
+        if (!tbody) return;
+        const hourly = Array.isArray(a.hourly) ? a.hourly : [];
+        if (hourly.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="muted center">No analytics yet.</td></tr>';
+            return;
+        }
+        const rows = hourly.map((row) => `
+            <tr>
+                <td>${String(row.hour).padStart(2, "0")}:00</td>
+                <td class="num">${fmtNumber(row.tariff_bdt_per_kwh, 1)}</td>
+                <td class="num">${fmtNumber(row.demand_kwh, 1)}</td>
+                <td class="num">${fmtNumber(row.effective_solar_kwh, 1)}</td>
+                <td class="num">${fmtNumber(row.min_reserve_kwh, 1)}</td>
+                <td class="num">${row.max_grid_kwh == null ? "—" : fmtNumber(row.max_grid_kwh, 1)}</td>
+                <td class="num">${row.charge_allowed ? '<span class="flag-yes">✓</span>' : '<span class="flag-no">✕</span>'}</td>
+                <td class="num">${row.discharge_allowed ? '<span class="flag-yes">✓</span>' : '<span class="flag-no">✕</span>'}</td>
+                <td class="num">${fmtNumber(row.baseline_grid_kwh, 1)}</td>
+                <td class="num">${fmtNumber(row.cost_bdt, 2)}</td>
+            </tr>
+        `).join("");
         tbody.innerHTML = rows;
     }
 
@@ -683,16 +849,19 @@
     // Raw JSON
     // =========================================================================
     function renderRawJson() {
-        const el = $("raw-json");
+        const node = el("raw-json");
+        if (!node) return;
         if (state.lastAnalyze) {
-            el.textContent = JSON.stringify(state.lastAnalyze, null, 2);
+            node.textContent = JSON.stringify(state.lastAnalyze, null, 2);
         } else if (state.lastResponse) {
-            el.textContent = JSON.stringify(state.lastResponse, null, 2);
+            node.textContent = JSON.stringify(state.lastResponse, null, 2);
+        } else {
+            node.textContent = "Run an optimization to view the response here.";
         }
     }
 
-    $("copy-json").addEventListener("click", async () => {
-        const text = $("raw-json").textContent;
+    safeAddListener("copy-json", async () => {
+        const text = el("raw-json")?.textContent || "";
         try {
             await navigator.clipboard.writeText(text);
             toast("JSON copied to clipboard.", "success");
@@ -701,24 +870,18 @@
         }
     });
 
-    $("export-csv").addEventListener("click", async () => {
+    safeAddListener("export-csv", async () => {
         let payload;
-        try {
-            payload = buildRequest();
-        } catch (err) {
-            toast(err.message, "error");
-            return;
-        }
+        try { payload = buildRequest(); }
+        catch (err) { toast(err.message, "error"); return; }
+
         try {
             const res = await fetch("/api/export-csv", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) {
-                const detail = await safeError(res);
-                throw new Error(detail);
-            }
+            if (!res.ok) throw new Error(await safeError(res));
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -741,54 +904,60 @@
         try {
             const res = await fetch("/api/status");
             const data = await res.json();
-            const pill = $("llm-status");
-            if (data.llm_configured) {
-                pill.textContent = `LLM: ${data.llm_models[0] || "gemini"}`;
-            } else {
-                pill.textContent = "LLM: offline (fallback)";
-                pill.parentElement.classList.add("offline");
+            const pill = el("llm-status");
+            if (pill) {
+                if (data.llm_configured) {
+                    pill.textContent = `LLM: ${data.llm_models?.[0] || "gemini"}`;
+                } else {
+                    pill.textContent = "LLM: offline (fallback)";
+                    pill.parentElement?.classList.add("offline");
+                }
             }
             // expose tariffs for chart
-            window.__gridwiseTariffs = (getSampleScenario().hours || []).map(
-                (h) => h.tariff_bdt_per_kwh
-            );
+            state.tariffs = (getSampleScenario().hours || []).map((h) => h.tariff_bdt_per_kwh);
+            window.__gridwiseTariffs = state.tariffs;
         } catch (err) {
             console.warn("Status check failed:", err);
         }
     }
 
     // =========================================================================
-    // Utilities
-    // =========================================================================
-    function escape(str) {
-        return String(str ?? "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    // =========================================================================
     // Init
     // =========================================================================
     function init() {
-        // Load sample scenario into form on first paint
+        // Load sample scenario into form on first paint.
         const sample = getSampleScenario();
-        $("scenario_id").value = sample.scenario_id;
-        $("operator_notes").value = sample.operator_notes.join("\n");
-        $("hours_json").value = JSON.stringify(sample.hours, null, 2);
-        $("b_capacity").value = sample.battery.capacity_kwh;
-        $("b_initial").value = sample.battery.initial_energy_kwh;
-        $("b_min").value = sample.battery.minimum_energy_kwh;
-        $("b_charge").value = sample.battery.max_charge_kwh_per_hour;
-        $("b_discharge").value = sample.battery.max_discharge_kwh_per_hour;
+        const sidEl = el("scenario_id");
+        const notesEl = el("operator_notes");
+        const hoursEl = el("hours_json");
+        if (sidEl) sidEl.value = sample.scenario_id;
+        if (notesEl) notesEl.value = sample.operator_notes.join("\n");
+        if (hoursEl) hoursEl.value = JSON.stringify(sample.hours, null, 2);
 
-        window.__gridwiseTariffs = sample.hours.map((h) => h.tariff_bdt_per_kwh);
+        const map = {
+            b_capacity: sample.battery.capacity_kwh,
+            b_initial: sample.battery.initial_energy_kwh,
+            b_min: sample.battery.minimum_energy_kwh,
+            b_charge: sample.battery.max_charge_kwh_per_hour,
+            b_discharge: sample.battery.max_discharge_kwh_per_hour,
+        };
+        for (const [id, val] of Object.entries(map)) {
+            const node = el(id);
+            if (node) node.value = val;
+        }
 
+        state.tariffs = sample.hours.map((h) => h.tariff_bdt_per_kwh);
+        window.__gridwiseTariffs = state.tariffs;
+
+        bindRunButton();
         loadPresets();
         checkStatus();
     }
 
-    document.addEventListener("DOMContentLoaded", init);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        // DOM is already ready (script tag is at end of body).
+        init();
+    }
 })();

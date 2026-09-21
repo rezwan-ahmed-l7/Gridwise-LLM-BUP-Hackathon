@@ -1,0 +1,237 @@
+/* ===========================================================================
+   GridWise LLM — Shared Page Theme
+   Used by /health and /docs so they match the main dashboard.
+   =========================================================================== */
+
+:root {
+    color-scheme: dark;
+    --bg-deep: #04060f;
+    --bg-base: #070b14;
+    --bg-surface: rgba(13, 19, 33, 0.72);
+    --bg-elevated: rgba(20, 28, 46, 0.78);
+    --bg-inset: rgba(6, 11, 22, 0.55);
+    --border-soft: rgba(255, 255, 255, 0.06);
+    --border-mid: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --border-accent: rgba(34, 211, 238, 0.35);
+    --primary: #10b981;
+    --primary-bright: #34d399;
+    --secondary: #06b6d4;
+    --secondary-bright: #22d3ee;
+    --accent-violet: #c4b5fd;
+    --accent-solar: #fbbf24;
+    --accent-rose: #f87171;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+    --text-faint: #475569;
+    --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Fraunces', 'Plus Jakarta Sans', serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 22px;
+    --shadow-soft: 0 4px 24px -6px rgba(0, 0, 0, 0.35);
+    --shadow-mid: 0 12px 36px -10px rgba(0, 0, 0, 0.5);
+    --shadow-strong: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    min-width: 320px;
+    color: var(--text);
+    font-family: var(--font-main);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--bg-deep);
+    background-attachment: fixed;
+    background-image:
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(6, 182, 212, 0.18), transparent 65%),
+        radial-gradient(ellipse 50% 40% at 90% 10%, rgba(16, 185, 129, 0.12), transparent 60%),
+        radial-gradient(circle 900px at 5% 100%, rgba(196, 181, 253, 0.08), transparent 65%);
+}
+
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+    background-size: 60px 60px;
+    -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+    mask-image: radial-gradient(ellipse at center, black 0%, transparent 80%);
+    z-index: 0;
+}
+
+/* ----- Brand header (shared between dashboard, docs, health) ----------- */
+.gw-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    background: rgba(4, 8, 18, 0.65);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 1.1rem clamp(1.2rem, 4vw, 2.4rem);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.gw-topbar::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(52, 211, 153, 0.4), rgba(34, 211, 238, 0.4), transparent);
+    opacity: 0.6;
+}
+.gw-brand { display: flex; align-items: center; gap: 1rem; }
+.gw-brand-mark {
+    width: 46px; height: 46px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #0ea5e9 100%);
+    display: grid; place-items: center;
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+    color: #fff;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.gw-brand-mark:hover { transform: rotate(-6deg) scale(1.05); }
+.gw-brand-mark svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.3)); }
+.gw-brand-text h1 {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    color: #fff;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    line-height: 1.1;
+}
+.gw-brand-text .gw-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.18));
+    color: #5eead4;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid rgba(94, 234, 212, 0.25);
+}
+.gw-brand-text p {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    margin: 3px 0 0;
+    text-transform: uppercase;
+}
+.gw-nav { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; }
+.gw-nav a {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-soft);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.gw-nav a:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    border-color: rgba(34, 211, 238, 0.4);
+    transform: translateY(-1px);
+}
+.gw-nav a svg { width: 14px; height: 14px; }
+.gw-nav a.active {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(6, 182, 212, 0.18));
+    border-color: rgba(94, 234, 212, 0.25);
+    color: #5eead4;
+}
+
+/* ----- Status pill ----------------------------------------------------- */
+.gw-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.06));
+    border: 1px solid rgba(52, 211, 153, 0.28);
+    color: #6ee7b7;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 6px 13px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.gw-pill .gw-pulse {
+    position: relative;
+    width: 8px; height: 8px; border-radius: 50%; background: #34d399;
+}
+.gw-pill .gw-pulse::before {
+    content: '';
+    position: absolute; inset: -4px;
+    border-radius: 50%; background: #34d399; opacity: 0.4;
+    animation: gw-pulse 2.2s ease-in-out infinite;
+}
+@keyframes gw-pulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.5; }
+    50%      { transform: scale(1.4); opacity: 0; }
+}
+.gw-pill.warn {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
+    border-color: rgba(251, 191, 36, 0.28);
+    color: #fcd34d;
+}
+.gw-pill.warn .gw-pulse, .gw-pill.warn .gw-pulse::before { background: #fbbf24; }
+.gw-pill.error {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.12), rgba(248, 113, 113, 0.04));
+    border-color: rgba(248, 113, 113, 0.28);
+    color: #fca5a5;
+}
+.gw-pill.error .gw-pulse, .gw-pill.error .gw-pulse::before { background: #f87171; }
+
+/* ----- Generic container / footer -------------------------------------- */
+.gw-container {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem clamp(1.2rem, 4vw, 2.4rem) 4rem;
+}
+.gw-footer {
+    text-align: center;
+    padding: 1.5rem 1rem 2rem;
+    font-size: 0.74rem;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+}
+.gw-footer span {
+    background: linear-gradient(135deg, #34d399, #22d3ee);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 700;
+}
+
+@media (max-width: 720px) {
+    .gw-topbar { padding: 0.85rem 1rem; }
+    .gw-brand-text h1 { font-size: 1.15rem; }
+    .gw-brand-text p { font-size: 0.62rem; }
+}
