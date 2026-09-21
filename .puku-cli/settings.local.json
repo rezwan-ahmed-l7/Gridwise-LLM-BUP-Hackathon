@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -X POST http://127.0.0.1:8765/optimize-energy -H \"Content-Type: application/json\" --data-binary @sample_request.json)"
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -X POST http://127.0.0.1:8765/optimize-energy -H \"Content-Type: application/json\" --data-binary @sample_request.json)",
+      "Bash(curl -s -o NUL -w \"health_json=%{http_code} ct=%{content_type}\\\\n\" http://localhost:8767/health)",
+      "Bash(curl -s -o NUL -w \"docs=%{http_code} | %{size_download}B ct=%{content_type}\\\\n\" http://localhost:8767/docs)",
+      "Bash(curl -s -o NUL -w \"health_ui=%{http_code} | %{size_download}B ct=%{content_type}\\\\n\" \"http://localhost:8767/health?ui=1\")",
+      "Bash(curl -s -o NUL -w \"dashboard=%{http_code} | %{size_download}B ct=%{content_type}\\\\n\" http://localhost:8767/)",
+      "Bash(curl -s -o NUL -w \"api_css=%{http_code} | %{size_download}B\\\\n\" http://localhost:8767/static/api.css)"
     ]
   }
 }

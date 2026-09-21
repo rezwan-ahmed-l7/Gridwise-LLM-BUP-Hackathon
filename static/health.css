@@ -1,14 +1,16 @@
 /* ===========================================================================
-   GridWise LLM — Health Page
-   Polished dark glass-morphism health probe.
+   GridWise LLM — Health Page (Premium Edition)
+   Glass-morphism hero, KPI tiles, dependency grid, premium typography.
+   Matches the main dashboard's design language exactly.
    =========================================================================== */
 
 .health-shell {
-    width: min(880px, 100%);
+    width: min(1100px, 100%);
     position: relative;
     z-index: 1;
 }
 
+/* ----- Hero / status banner ----------------------------------------- */
 .health-eyebrow {
     margin: 6px 0 0;
     color: var(--text-muted);
@@ -16,24 +18,37 @@
     letter-spacing: 0.02em;
 }
 
-.health-card {
-    margin-top: 28px;
-    padding: clamp(28px, 5vw, 48px);
+.health-hero {
+    margin-top: 12px;
+    padding: clamp(28px, 4.5vw, 44px);
     border: 1px solid var(--border-soft);
     border-radius: 22px;
-    background: var(--bg-surface);
-    backdrop-filter: blur(28px) saturate(150%);
-    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    background:
+        radial-gradient(ellipse 60% 60% at 15% 0%, rgba(16, 185, 129, 0.14), transparent 65%),
+        radial-gradient(ellipse 60% 60% at 100% 100%, rgba(34, 211, 238, 0.12), transparent 70%),
+        var(--bg-surface);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
     box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
     position: relative;
     overflow: hidden;
 }
-.health-card::before {
+.health-hero::before {
     content: '';
     position: absolute;
     inset: 0 0 auto 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+}
+.health-hero::after {
+    content: '';
+    position: absolute;
+    right: -60px; top: -60px;
+    width: 280px; height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.18), transparent 65%);
+    filter: blur(30px);
+    pointer-events: none;
 }
 
 .health-status {
@@ -43,95 +58,188 @@
     padding: 18px 22px;
     border: 1px solid rgba(16, 185, 129, 0.28);
     border-radius: 14px;
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04));
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(16, 185, 129, 0.04));
     color: #6ee7b7;
     font-weight: 600;
     letter-spacing: 0.01em;
+    font-size: 0.95rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .health-status.warn {
-    border-color: rgba(251, 191, 36, 0.28);
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
+    border-color: rgba(251, 191, 36, 0.32);
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(251, 191, 36, 0.04));
     color: #fcd34d;
 }
 .health-status.error {
-    border-color: rgba(248, 113, 113, 0.28);
-    background: linear-gradient(135deg, rgba(248, 113, 113, 0.12), rgba(248, 113, 113, 0.04));
+    border-color: rgba(248, 113, 113, 0.32);
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.14), rgba(248, 113, 113, 0.04));
     color: #fca5a5;
 }
 
 .health-dot {
     position: relative;
-    width: 11px; height: 11px; border-radius: 50%;
+    width: 12px; height: 12px; border-radius: 50%;
     background: #34d399;
     flex-shrink: 0;
+    box-shadow: 0 0 14px rgba(52, 211, 153, 0.6);
 }
 .health-dot::before {
     content: '';
-    position: absolute; inset: -5px;
+    position: absolute; inset: -6px;
     border-radius: 50%; background: #34d399;
     opacity: 0.4;
     animation: gw-pulse 2.2s ease-in-out infinite;
 }
+.health-status.warn .health-dot { background: #fbbf24; box-shadow: 0 0 14px rgba(251, 191, 36, 0.6); }
+.health-status.warn .health-dot::before { background: #fbbf24; }
+.health-status.error .health-dot { background: #f87171; box-shadow: 0 0 14px rgba(248, 113, 113, 0.6); }
+.health-status.error .health-dot::before { background: #f87171; }
 
+.health-status-meta {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 600;
+}
+
+/* ----- KPI tile grid ------------------------------------------------- */
 .health-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 14px;
     margin-top: 22px;
 }
 
 .health-metric {
-    padding: 18px 20px;
+    padding: 20px 22px;
     border: 1px solid var(--border-soft);
-    border-radius: 14px;
+    border-radius: 16px;
     background: rgba(6, 11, 22, 0.55);
     position: relative;
     overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .health-metric::before {
     content: '';
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    width: 2px;
+    width: 3px;
     background: linear-gradient(180deg, var(--secondary), var(--accent-violet));
-    opacity: 0.5;
+    opacity: 0.7;
 }
+.health-metric::after {
+    content: '';
+    position: absolute;
+    right: -40px; top: -40px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.12), transparent 65%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+.health-metric:hover {
+    border-color: rgba(34, 211, 238, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 16px 36px -10px rgba(6, 182, 212, 0.18);
+}
+.health-metric:hover::after { opacity: 1; }
+
+.health-metric.brand::before { background: linear-gradient(180deg, #10b981, #06b6d4); }
+.health-metric.info::before { background: linear-gradient(180deg, #22d3ee, #0ea5e9); }
+.health-metric.violet::before { background: linear-gradient(180deg, #c4b5fd, #a78bfa); }
+.health-metric.solar::before { background: linear-gradient(180deg, #fbbf24, #d97706); }
 
 .health-label {
     color: var(--text-dim);
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: 0.66rem;
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
 }
 
 .health-value {
     color: #fff;
     font-family: var(--font-mono);
     font-weight: 700;
-    font-size: 1.02rem;
+    font-size: 1.08rem;
     overflow-wrap: anywhere;
+    position: relative;
+    z-index: 1;
+    line-height: 1.3;
 }
 .health-value.ok { color: var(--primary-bright); }
 .health-value.warn { color: #fcd34d; }
+.health-value.info { color: var(--secondary-bright); }
+.health-value.violet { color: var(--accent-violet); }
 
+.health-value-sub {
+    margin-top: 6px;
+    font-family: var(--font-main);
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+/* ----- Models chips -------------------------------------------------- */
+.health-models {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.health-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.10));
+    border: 1px solid rgba(94, 234, 212, 0.32);
+    color: #5eead4;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.health-chip.fallback {
+    background: rgba(148, 163, 184, 0.10);
+    border-color: rgba(148, 163, 184, 0.32);
+    color: #cbd5e1;
+}
+
+/* ----- Footer metadata strip ---------------------------------------- */
 .health-meta {
     display: flex;
     align-items: center;
     gap: 12px;
     padding-top: 22px;
-    margin-top: 22px;
+    margin-top: 26px;
     border-top: 1px solid var(--border-soft);
     font-size: 0.78rem;
     color: var(--text-muted);
     font-family: var(--font-mono);
     flex-wrap: wrap;
 }
+.health-meta strong { color: var(--text); font-weight: 700; }
+.health-meta code {
+    background: rgba(4, 8, 16, 0.65);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-soft);
+    color: var(--secondary-bright);
+    font-size: 0.74rem;
+}
 
-.health-meta strong { color: var(--text); }
-
+/* ----- Quick action row --------------------------------------------- */
 .health-action-row {
     display: flex;
     flex-wrap: wrap;
@@ -139,7 +247,7 @@
     margin-top: 24px;
 }
 .health-action-row a {
-    padding: 10px 16px;
+    padding: 10px 18px;
     border: 1px solid var(--border-soft);
     border-radius: 10px;
     color: #cbd5e1;
@@ -147,16 +255,151 @@
     font-size: 0.82rem;
     font-weight: 600;
     background: rgba(255, 255, 255, 0.04);
-    transition: all 0.25s ease;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+.health-action-row a::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.18), transparent);
+    transition: left 0.6s ease;
+    pointer-events: none;
 }
 .health-action-row a:hover {
     border-color: rgba(34, 211, 238, 0.4);
     color: #fff;
-    background: rgba(34, 211, 238, 0.1);
+    background: rgba(34, 211, 238, 0.12);
     transform: translateY(-1px);
+    box-shadow: 0 8px 20px -6px rgba(6, 182, 212, 0.3);
+}
+.health-action-row a:hover::before { left: 100%; }
+.health-action-row a.primary {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(6, 182, 212, 0.22));
+    border-color: rgba(94, 234, 212, 0.45);
+    color: #5eead4;
 }
 
-@media (max-width: 520px) {
+/* ----- Section divider ----------------------------------------------- */
+.health-section-title {
+    margin: 38px 0 18px;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.15rem;
+    letter-spacing: -0.015em;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.health-section-title::before {
+    content: '';
+    width: 6px; height: 22px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #10b981, #06b6d4);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+.health-section-title .health-eyebrow-inline {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* ----- Endpoint reference table ------------------------------------- */
+.health-endpoints {
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    background: var(--bg-surface);
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+}
+.health-endpoints table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-main);
+    font-size: 0.85rem;
+}
+.health-endpoints thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(4, 8, 16, 0.4);
+}
+.health-endpoints tbody td {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    vertical-align: middle;
+}
+.health-endpoints tbody tr:last-child td { border-bottom: 0; }
+.health-endpoints tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
+.health-endpoints .method-pill {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 3px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.health-endpoints .method-pill.get {
+    background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%);
+    color: #f0f9ff;
+}
+.health-endpoints .method-pill.post {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: #ecfdf5;
+}
+.health-endpoints .path {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--secondary-bright);
+    margin-left: 10px;
+}
+.health-endpoints .path a { color: inherit; text-decoration: none; }
+.health-endpoints .path a:hover { color: var(--primary-bright); }
+.health-endpoints .desc {
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-size: 0.78rem;
+}
+.health-endpoints .desc-inline {
+    color: var(--text-muted);
+    margin-left: 16px;
+    font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
     .health-grid { grid-template-columns: 1fr; }
+    .health-endpoints table,
+    .health-endpoints thead,
+    .health-endpoints tbody,
+    .health-endpoints tr,
+    .health-endpoints td,
+    .health-endpoints th { display: block; }
+    .health-endpoints thead { display: none; }
+    .health-endpoints tr {
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border-soft);
+    }
+    .health-endpoints td { padding: 0; border: 0; }
+    .health-endpoints td + td { margin-top: 6px; }
+    .health-endpoints .desc-inline { display: block; margin-left: 0; }
+    .health-status-meta { display: none; }
 }

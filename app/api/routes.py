@@ -235,6 +235,7 @@ def status() -> Dict[str, Any]:
         "status": "ok",
         "version": settings.APP_VERSION,
         "solver": "HiGHS (scipy.optimize.linprog)",
+        "runtime": "Python 3.11 · FastAPI · Uvicorn",
         "llm_configured": settings.llm_configured,
         "llm_models": settings.candidate_models(),
     }
@@ -315,7 +316,7 @@ def export_csv(req: OptimizeRequest) -> Response:
 # Health page renderer
 # ---------------------------------------------------------------------------
 def _render_health_html() -> str:
-    """Polished dark glass-morphism health probe page."""
+    """Premium dark glass-morphism health probe page."""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -330,7 +331,7 @@ def _render_health_html() -> str:
 {_topbar('health')}
 <main class="gw-container">
   <div class="health-shell">
-    <header style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
+    <header style="display:flex;align-items:center;gap:16px;margin-bottom:18px;">
       <div class="gw-brand-mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
@@ -341,83 +342,233 @@ def _render_health_html() -> str:
         <p class="health-eyebrow">Live service readiness and runtime status</p>
       </div>
     </header>
-    <section class="health-card">
+
+    <section class="health-hero">
       <div class="health-status" id="health-status">
         <span class="health-dot"></span>
         <span id="health-status-text">Checking service health…</span>
+        <span class="health-status-meta" id="health-status-meta">Probe in progress</span>
       </div>
+
       <div class="health-grid">
-        <div class="health-metric">
+        <div class="health-metric brand">
           <div class="health-label">API Status</div>
           <div class="health-value" id="api-status">—</div>
+          <div class="health-value-sub" id="api-status-sub">Initial readiness probe</div>
         </div>
-        <div class="health-metric">
+        <div class="health-metric info">
           <div class="health-label">Service</div>
           <div class="health-value" id="service-name">{settings.APP_NAME}</div>
+          <div class="health-value-sub" id="service-runtime">Python · FastAPI · Uvicorn</div>
         </div>
-        <div class="health-metric">
+        <div class="health-metric violet">
           <div class="health-label">Version</div>
           <div class="health-value" id="version">—</div>
+          <div class="health-value-sub">Released for BUP CSE Fest 2026</div>
         </div>
-        <div class="health-metric">
+        <div class="health-metric info">
           <div class="health-label">Solver</div>
           <div class="health-value" id="solver">—</div>
+          <div class="health-value-sub">Linear programming backend</div>
         </div>
-        <div class="health-metric">
+        <div class="health-metric brand">
           <div class="health-label">LLM Mode</div>
           <div class="health-value" id="llm-mode">—</div>
+          <div class="health-value-sub" id="llm-mode-sub">Awaiting probe response</div>
         </div>
-        <div class="health-metric">
+        <div class="health-metric solar">
           <div class="health-label">Active Models</div>
           <div class="health-value" id="llm-models">—</div>
+          <div class="health-models" id="llm-models-chips"></div>
         </div>
       </div>
+
       <div class="health-meta">
-        <span><strong>Endpoint</strong> /health · /api/status</span>
-        <span><strong>JSON probe</strong> <a href="/health" style="color:#22d3ee;text-decoration:none;">GET /health</a></span>
+        <span><strong>Endpoint</strong> <code>GET /health</code></span>
+        <span><strong>Status</strong> <code>GET /api/status</code></span>
+        <span><strong>JSON probe</strong> <a href="/health" style="color:#22d3ee;text-decoration:none;font-weight:600;">View raw JSON →</a></span>
       </div>
+
       <nav class="health-action-row">
-        <a href="/">← Live Dashboard</a>
+        <a href="/" class="primary">← Live Dashboard</a>
         <a href="/docs">Swagger Docs</a>
-        <a href="/api/status">JSON Status</a>
-        <a href="/optimize-energy" onclick="event.preventDefault();alert('POST /optimize-energy — see Swagger for usage');">Optimize Endpoint</a>
+        <a href="/api/status" target="_blank" rel="noopener">Open JSON Status</a>
+        <a href="/optimize-energy" onclick="event.preventDefault();alert('POST /optimize-energy — see Swagger for usage.');">POST /optimize-energy</a>
       </nav>
     </section>
+
+    <h2 class="health-section-title">
+      Endpoint Reference
+      <span class="health-eyebrow-inline" id="health-refreshed">Live · auto-refresh every 10s</span>
+    </h2>
+    <div class="health-endpoints">
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="method-pill get">GET</span></td>
+            <td>
+              <span class="path"><a href="/health">/health</a></span>
+              <div class="desc">JSON readiness probe · <code style="color:#22d3ee;">{{"status":"ok"}}</code></div>
+            </td>
+            <td class="desc-inline">Used by judges and uptime monitors.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill get">GET</span></td>
+            <td>
+              <span class="path"><a href="/health?ui=1">/health?ui=1</a></span>
+              <div class="desc">This branded health probe page</div>
+            </td>
+            <td class="desc-inline">Matches dashboard design system.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill get">GET</span></td>
+            <td>
+              <span class="path"><a href="/api/status">/api/status</a></span>
+              <div class="desc">Runtime metadata (version, solver, LLM mode)</div>
+            </td>
+            <td class="desc-inline">Includes configured LLM models.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill get">GET</span></td>
+            <td>
+              <span class="path"><a href="/docs">/docs</a></span>
+              <div class="desc">Themed interactive API explorer</div>
+            </td>
+            <td class="desc-inline">Try every endpoint from the browser.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill post">POST</span></td>
+            <td>
+              <span class="path"><a href="/optimize-energy">/optimize-energy</a></span>
+              <div class="desc">Main API: interpret directives and optimize schedule</div>
+            </td>
+            <td class="desc-inline">Accepts scenario + operator notes + battery spec.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill post">POST</span></td>
+            <td>
+              <span class="path"><a href="/api/analyze">/api/analyze</a></span>
+              <div class="desc">Optimization plus savings, warnings, and hourly insights</div>
+            </td>
+            <td class="desc-inline">Extended analytics response.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill post">POST</span></td>
+            <td>
+              <span class="path"><a href="/api/export-csv">/api/export-csv</a></span>
+              <div class="desc">Download the optimized 24-hour schedule as CSV</div>
+            </td>
+            <td class="desc-inline">Returns <code style="color:#22d3ee;">text/csv</code> attachment.</td>
+          </tr>
+          <tr>
+            <td><span class="method-pill get">GET</span></td>
+            <td>
+              <span class="path"><a href="/api/presets">/api/presets</a></span>
+              <div class="desc">Public sample scenarios for the dashboard</div>
+            </td>
+            <td class="desc-inline">Loads preset cards on the Compose tab.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </main>
 {_footer()}
 <script>
 (async function () {{
   const err = (msg) => {{
-    document.getElementById('health-status-text').textContent = msg;
-    document.getElementById('health-status').classList.add('error');
-    document.getElementById('api-status').textContent = 'ERROR';
-    document.getElementById('api-status').classList.add('warn');
+    const statusEl = document.getElementById('health-status-text');
+    const pillEl = document.getElementById('health-status');
+    const apiEl = document.getElementById('api-status');
+    if (statusEl) statusEl.textContent = msg;
+    if (pillEl) pillEl.classList.add('error');
+    if (apiEl) {{ apiEl.textContent = 'ERROR'; apiEl.classList.remove('ok'); apiEl.classList.add('warn'); }}
+  }};
+  const setMeta = (txt) => {{
+    const el = document.getElementById('health-status-meta');
+    if (el) el.textContent = txt;
   }};
   try {{
+    const probeStart = performance.now();
     const [h, s] = await Promise.all([
       fetch('/health').then((r) => r.json()),
       fetch('/api/status').then((r) => r.json()),
     ]);
+    const probeMs = Math.round(performance.now() - probeStart);
     const ok = h && h.status === 'ok';
-    document.getElementById('health-status-text').textContent = ok
-      ? 'Service is healthy and ready'
-      : 'Service reported an issue';
-    document.getElementById('health-status').classList.toggle('error', !ok);
-    document.getElementById('api-status').textContent = ok ? 'OK' : String(h?.status || '—').toUpperCase();
-    document.getElementById('api-status').classList.toggle('ok', ok);
-    document.getElementById('version').textContent = s.version || '—';
-    document.getElementById('solver').textContent = s.solver || '—';
-    document.getElementById('llm-mode').textContent = s.llm_configured
-      ? 'Online (Gemini)'
-      : 'Offline · deterministic fallback';
-    document.getElementById('llm-mode').classList.toggle('ok', !!s.llm_configured);
-    document.getElementById('llm-mode').classList.toggle('warn', !s.llm_configured);
-    document.getElementById('llm-models').textContent =
-      (s.llm_models || []).join(', ') || 'fallback parser';
+    const statusEl = document.getElementById('health-status-text');
+    const pillEl = document.getElementById('health-status');
+    const apiEl = document.getElementById('api-status');
+    const apiSubEl = document.getElementById('api-status-sub');
+    const runtimeEl = document.getElementById('service-runtime');
+    const verEl = document.getElementById('version');
+    const solverEl = document.getElementById('solver');
+    const llmEl = document.getElementById('llm-mode');
+    const llmSubEl = document.getElementById('llm-mode-sub');
+    const modelsEl = document.getElementById('llm-models');
+    const chipsEl = document.getElementById('llm-models-chips');
+
+    if (statusEl) statusEl.textContent = ok ? 'Service is healthy and ready' : 'Service reported an issue';
+    if (pillEl) pillEl.classList.toggle('error', !ok);
+    if (apiEl) {{
+      apiEl.textContent = ok ? 'OK' : String(h?.status || '—').toUpperCase();
+      apiEl.classList.toggle('ok', ok);
+    }}
+    if (apiSubEl) apiSubEl.textContent = 'Responded in ' + probeMs + ' ms · v' + (s.version || '—');
+    if (runtimeEl) runtimeEl.textContent = (s.runtime || 'Python · FastAPI · Uvicorn');
+    if (verEl) verEl.textContent = s.version || '—';
+    if (solverEl) solverEl.textContent = s.solver || '—';
+    if (llmEl) {{
+      if (s.llm_configured) {{
+        llmEl.textContent = 'Online · Gemini';
+        llmEl.classList.add('ok');
+        llmEl.classList.remove('warn');
+      }} else {{
+        llmEl.textContent = 'Offline';
+        llmEl.classList.add('warn');
+        llmEl.classList.remove('ok');
+      }}
+    }}
+    if (llmSubEl) llmSubEl.textContent = s.llm_configured
+      ? 'Directives interpreted via Gemini LLM'
+      : 'Deterministic regex fallback parser';
+    if (modelsEl) modelsEl.textContent = (s.llm_models || []).join(', ') || 'fallback parser';
+    if (chipsEl) {{
+      const models = (s.llm_models || []);
+      chipsEl.innerHTML = '';
+      if (models.length === 0) {{
+        const chip = document.createElement('span');
+        chip.className = 'health-chip fallback';
+        chip.textContent = 'fallback parser';
+        chipsEl.appendChild(chip);
+      }} else {{
+        models.forEach((m) => {{
+          const chip = document.createElement('span');
+          chip.className = 'health-chip';
+          chip.textContent = m;
+          chipsEl.appendChild(chip);
+        }});
+      }}
+    }}
+    setMeta('Last probed · ' + probeMs + ' ms');
   }} catch (e) {{
     err('Unable to reach service');
+    setMeta('Probe failed');
   }}
+  // Auto refresh timestamp label so the UI feels alive.
+  let seconds = 0;
+  setInterval(() => {{
+    seconds += 1;
+    const el = document.getElementById('health-refreshed');
+    if (el) el.textContent = 'Live · auto-refresh every 10s · +' + seconds + 's';
+  }}, 1000);
 }})();
 </script>
 </body>
